@@ -244,8 +244,9 @@ class TestRawScpiGuard:
             mock_settings.return_value = settings
 
             result = await handle_tool("cmw_scpi_send", {"command": "*RST"})
-            assert len(result) == 1
-            assert "disabled" in result[0].text.lower() or "error" in result[0].text.lower()
+            assert len(result.content) == 1
+            assert result.isError is True
+            assert "disabled" in result.content[0].text.lower() or "error" in result.content[0].text.lower()
 
     @pytest.mark.asyncio
     async def test_scpi_query_blocked_when_disabled(self):
@@ -257,8 +258,9 @@ class TestRawScpiGuard:
             mock_settings.return_value = settings
 
             result = await handle_tool("cmw_scpi_query", {"command": "*IDN?"})
-            assert len(result) == 1
-            assert "disabled" in result[0].text.lower() or "error" in result[0].text.lower()
+            assert len(result.content) == 1
+            assert result.isError is True
+            assert "disabled" in result.content[0].text.lower() or "error" in result.content[0].text.lower()
 
     @pytest.mark.asyncio
     async def test_scpi_send_logs_warning_when_enabled(self):
@@ -315,7 +317,8 @@ class TestRawScpiGuard:
             mock_settings.return_value = settings
 
             result = await handle_tool("cmw_scpi_send", {"command": "*RST"})
-            assert "CMW_ALLOW_RAW_SCPI" in result[0].text
+            assert result.isError is True
+            assert "CMW_ALLOW_RAW_SCPI" in result.content[0].text
 
 
 # =============================================================================

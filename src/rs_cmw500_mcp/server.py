@@ -6,7 +6,7 @@ from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, Tool
 
 from .config import get_settings
 from .tools import get_tools, handle_tool
@@ -24,8 +24,12 @@ def create_server() -> Server:
         return get_tools()
 
     @server.call_tool()
-    async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-        """Handle tool invocation."""
+    async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
+        """Handle tool invocation.
+
+        Returns CallToolResult directly so the MCP framework
+        can propagate isError=True for error responses.
+        """
         logger.debug(f"Tool called: {name} with args: {arguments}")
         return await handle_tool(name, arguments)
 

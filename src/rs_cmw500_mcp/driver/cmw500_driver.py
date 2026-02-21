@@ -1,5 +1,6 @@
 """CMW500 driver for Rohde & Schwarz CMW500 via TCP/IP SCPI."""
 
+import asyncio
 import logging
 from enum import Enum
 from typing import Any
@@ -128,8 +129,9 @@ class CMW500Driver:
         try:
             await self._scpi.connect()
             self._state = ConnectionState.CONNECTED
-        except Exception:
+        except (OSError, asyncio.TimeoutError) as e:
             self._state = ConnectionState.ERROR
+            logger.error(f"Failed to connect to {self.host}:{self.port}: {e}")
             raise
 
     async def disconnect(self) -> None:
@@ -399,7 +401,7 @@ class CMW500Driver:
             if len(parts) >= 2:
                 result.reliability = parts[0].strip()
                 result.current_dbm = _parse_float(parts[1], "current_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch current power: {e}")
 
         try:
@@ -407,7 +409,7 @@ class CMW500Driver:
             parts = response.split(",")
             if len(parts) >= 2:
                 result.average_dbm = _parse_float(parts[1], "average_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch average power: {e}")
 
         try:
@@ -415,7 +417,7 @@ class CMW500Driver:
             parts = response.split(",")
             if len(parts) >= 2:
                 result.maximum_dbm = _parse_float(parts[1], "maximum_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch maximum power: {e}")
 
         try:
@@ -423,7 +425,7 @@ class CMW500Driver:
             parts = response.split(",")
             if len(parts) >= 2:
                 result.minimum_dbm = _parse_float(parts[1], "minimum_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch minimum power: {e}")
 
         return result
@@ -587,7 +589,7 @@ class CMW500Driver:
                 result.current_dbm = _parse_float(parts[1], "lte_power")
             if len(parts) >= 3:
                 result.average_dbm = _parse_float(parts[2], "lte_avg_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch LTE power: {e}")
         return result
 
@@ -609,7 +611,7 @@ class CMW500Driver:
                 result.evm_rms_percent = _parse_float(parts[1], "evm_rms")
             if len(parts) >= 3:
                 result.evm_peak_percent = _parse_float(parts[2], "evm_peak")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch LTE EVM: {e}")
         return result
 
@@ -634,7 +636,7 @@ class CMW500Driver:
             if len(parts) >= 5:
                 result.aclr_minus2_db = _parse_float(parts[3], "aclr_minus2")
                 result.aclr_plus2_db = _parse_float(parts[4], "aclr_plus2")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch LTE ACLR: {e}")
         return result
 
@@ -657,7 +659,7 @@ class CMW500Driver:
                 result.passed = parts[1].strip() in ("0", "PASS")
             if len(parts) >= 3:
                 result.margin_db = _parse_float(parts[2], "sem_margin")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch LTE SEM: {e}")
         return result
 
@@ -677,7 +679,7 @@ class CMW500Driver:
             if len(parts) >= 2:
                 result["frequency_error_hz"] = _parse_float(parts[1], "freq_error")
             return result
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch frequency error: {e}")
             return {"error": str(e)}
 
@@ -715,6 +717,6 @@ class CMW500Driver:
         if self._generator_on:
             try:
                 await self.gen_output_off()
-            except Exception:
-                pass
+            except OSError as e:
+                logger.warning(f"Failed to turn off generator during cleanup: {e}")
         await self.disconnect()

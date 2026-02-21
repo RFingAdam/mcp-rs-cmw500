@@ -1,11 +1,12 @@
 """MCP tool definitions and handlers for CMW500 operations."""
 
+import asyncio
 import json
 import logging
 from pathlib import Path
 from typing import Any
 
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool
 
 from .config import get_settings
 from .driver import CMW500Driver
@@ -49,6 +50,12 @@ _template_registry: dict[str, type] = {
     "wlan_tx": WLANTxTemplate,
 }
 
+# Asyncio locks for shared mutable state (Issue #4)
+# Lock ordering: _connection_lock -> _template_lock -> _measurement_lock
+_connection_lock = asyncio.Lock()
+_template_lock = asyncio.Lock()
+_measurement_lock = asyncio.Lock()
+
 
 def _get_connection_key(host: str, port: int) -> str:
     """Generate unique key for connection."""
@@ -58,59 +65,78 @@ def _get_connection_key(host: str, port: int) -> str:
 async def _get_cmw(
     host: str | None = None, port: int | None = None
 ) -> CMW500Driver:
-    """Get or create CMW500 connection."""
+    """Get or create CMW500 connection.
+
+    Thread-safe via _connection_lock to prevent race conditions
+    when multiple MCP tool calls access the connection pool concurrently.
+    """
     settings = get_settings()
     host = host or settings.default_host
     port = port or settings.default_port
     key = _get_connection_key(host, port)
 
-    if key in _cmw_connections:
-        cmw = _cmw_connections[key]
-        if cmw.is_connected:
-            return cmw
-        # Clean up stale connection
-        try:
-            await cmw.disconnect()
-        except Exception:
-            pass
+    async with _connection_lock:
+        if key in _cmw_connections:
+            cmw = _cmw_connections[key]
+            if cmw.is_connected:
+                return cmw
+            # Clean up stale connection
+            try:
+                await cmw.disconnect()
+            except OSError as e:
+                logger.warning(f"Error cleaning up stale connection {key}: {e}")
 
-    # Create new connection
-    cmw = CMW500Driver(
-        host=host,
-        port=port,
-        timeout=settings.connection_timeout,
-        command_timeout=settings.command_timeout,
-        safety_limits=settings.get_safety_limits(),
-    )
-    await cmw.connect()
-    _cmw_connections[key] = cmw
-    return cmw
+        # Create new connection
+        cmw = CMW500Driver(
+            host=host,
+            port=port,
+            timeout=settings.connection_timeout,
+            command_timeout=settings.command_timeout,
+            safety_limits=settings.get_safety_limits(),
+        )
+        await cmw.connect()
+        _cmw_connections[key] = cmw
+        return cmw
 
 
 async def _close_cmw(host: str, port: int) -> bool:
-    """Close CMW500 connection."""
+    """Close CMW500 connection.
+
+    Thread-safe via _connection_lock.
+    """
     key = _get_connection_key(host, port)
-    if key in _cmw_connections:
-        cmw = _cmw_connections.pop(key)
-        await cmw.disconnect()
-        return True
-    return False
+    async with _connection_lock:
+        if key in _cmw_connections:
+            cmw = _cmw_connections.pop(key)
+            await cmw.disconnect()
+            return True
+        return False
 
 
-def _format_result(result: Any) -> list[TextContent]:
-    """Format result as MCP TextContent."""
+def _format_result(result: Any) -> CallToolResult:
+    """Format result as MCP CallToolResult (success)."""
     if isinstance(result, dict):
         text = json.dumps(result, indent=2, default=str)
     elif isinstance(result, list):
         text = json.dumps(result, indent=2, default=str)
     else:
         text = str(result)
-    return [TextContent(type="text", text=text)]
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)],
+        isError=False,
+    )
 
 
-def _format_error(error: Exception) -> list[TextContent]:
-    """Format error as MCP TextContent."""
-    return [TextContent(type="text", text=f"Error: {error}")]
+def _format_error(error: Exception) -> CallToolResult:
+    """Format error as MCP CallToolResult with isError=True.
+
+    This ensures the MCP protocol correctly signals error responses
+    to the client, allowing proper error handling downstream.
+    """
+    return CallToolResult(
+        content=[TextContent(type="text", text=f"Error: {error}")],
+        isError=True,
+    )
 
 
 # =============================================================================
@@ -873,7 +899,7 @@ def get_tools() -> list[Tool]:
 # =============================================================================
 
 
-async def handle_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+async def handle_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
     """
     Handle tool invocation.
 
@@ -882,7 +908,7 @@ async def handle_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]
         arguments: Tool arguments
 
     Returns:
-        List of TextContent with results
+        CallToolResult with content and isError flag
     """
     try:
         # Connection Tools
@@ -1013,8 +1039,17 @@ async def handle_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]
     except CMW500Error as e:
         logger.error(f"CMW500 error in {name}: {e}")
         return _format_error(e)
+    except (ConnectionError, TimeoutError, OSError) as e:
+        logger.error(f"Connection/IO error in {name}: {e}")
+        return _format_error(e)
+    except ValueError as e:
+        logger.error(f"Validation error in {name}: {e}")
+        return _format_error(e)
+    except KeyError as e:
+        logger.error(f"Missing argument in {name}: {e}")
+        return _format_error(ValueError(f"Missing required argument: {e}"))
     except Exception as e:
-        logger.error(f"Unexpected error in {name}: {e}")
+        logger.exception(f"Unexpected error in {name}: {e}")
         return _format_error(e)
 
 
@@ -1023,7 +1058,7 @@ async def handle_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]
 # =============================================================================
 
 
-async def _handle_discover(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_discover(args: dict[str, Any]) -> CallToolResult:
     """Scan for CMW500 instruments."""
     host = args.get("host", "127.0.0.1")
     start_port = args.get("start_port", 5025)
@@ -1043,7 +1078,8 @@ async def _handle_discover(args: dict[str, Any]) -> list[TextContent]:
                 "firmware": info.firmware_version,
             })
             await cmw.disconnect()
-        except Exception:
+        except (OSError, CMW500Error) as e:
+            logger.debug(f"No instrument at {host}:{port}: {e}")
             continue
 
     return _format_result({
@@ -1053,7 +1089,7 @@ async def _handle_discover(args: dict[str, Any]) -> list[TextContent]:
     })
 
 
-async def _handle_connect(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_connect(args: dict[str, Any]) -> CallToolResult:
     """Connect to CMW500."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     info = await cmw.identify()
@@ -1064,7 +1100,7 @@ async def _handle_connect(args: dict[str, Any]) -> list[TextContent]:
     })
 
 
-async def _handle_disconnect(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_disconnect(args: dict[str, Any]) -> CallToolResult:
     """Disconnect from CMW500."""
     settings = get_settings()
     host = args.get("host", settings.default_host)
@@ -1076,28 +1112,28 @@ async def _handle_disconnect(args: dict[str, Any]) -> list[TextContent]:
     })
 
 
-async def _handle_identify(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_identify(args: dict[str, Any]) -> CallToolResult:
     """Get CMW500 identification."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     info = await cmw.identify()
     return _format_result(info.to_dict())
 
 
-async def _handle_get_status(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_get_status(args: dict[str, Any]) -> CallToolResult:
     """Get CMW500 status."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     status = await cmw.get_status()
     return _format_result(status)
 
 
-async def _handle_query_options(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_query_options(args: dict[str, Any]) -> CallToolResult:
     """Query installed options."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     options = await cmw.query_options()
     return _format_result({"options": options, "count": len(options)})
 
 
-async def _handle_gen_set_frequency(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_gen_set_frequency(args: dict[str, Any]) -> CallToolResult:
     """Set generator frequency."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     freq = args["frequency_hz"]
@@ -1109,7 +1145,7 @@ async def _handle_gen_set_frequency(args: dict[str, Any]) -> list[TextContent]:
     })
 
 
-async def _handle_gen_set_level(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_gen_set_level(args: dict[str, Any]) -> CallToolResult:
     """Set generator level."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     level = args["level_dbm"]
@@ -1117,21 +1153,21 @@ async def _handle_gen_set_level(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"status": "ok", "level_dbm": level})
 
 
-async def _handle_gen_output_on(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_gen_output_on(args: dict[str, Any]) -> CallToolResult:
     """Enable generator output."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     await cmw.gen_output_on()
     return _format_result({"status": "ok", "generator_output": "ON"})
 
 
-async def _handle_gen_output_off(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_gen_output_off(args: dict[str, Any]) -> CallToolResult:
     """Disable generator output."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     await cmw.gen_output_off()
     return _format_result({"status": "ok", "generator_output": "OFF"})
 
 
-async def _handle_gen_load_arb(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_gen_load_arb(args: dict[str, Any]) -> CallToolResult:
     """Load ARB file."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     file_path = sanitize_scpi_param(args["file_path"])
@@ -1139,7 +1175,7 @@ async def _handle_gen_load_arb(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"status": "ok", "arb_file": file_path})
 
 
-async def _handle_gen_configure_arb(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_gen_configure_arb(args: dict[str, Any]) -> CallToolResult:
     """Configure ARB playback."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     rep = args.get("repetition", "continuous")
@@ -1150,7 +1186,7 @@ async def _handle_gen_configure_arb(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"status": "ok", "repetition": rep})
 
 
-async def _handle_meas_configure_power(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_meas_configure_power(args: dict[str, Any]) -> CallToolResult:
     """Configure power measurement."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     rep_str = args.get("repetition", "singleshot")
@@ -1167,14 +1203,14 @@ async def _handle_meas_configure_power(args: dict[str, Any]) -> list[TextContent
     return _format_result({"status": "ok", "measurement": "power_configured"})
 
 
-async def _handle_meas_configure_spectrum(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_meas_configure_spectrum(args: dict[str, Any]) -> CallToolResult:
     """Configure spectrum measurement."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.meas_configure_spectrum()
     return _format_result(result)
 
 
-async def _handle_meas_set_frequency(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_meas_set_frequency(args: dict[str, Any]) -> CallToolResult:
     """Set analyzer frequency."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     freq = args["frequency_hz"]
@@ -1186,7 +1222,7 @@ async def _handle_meas_set_frequency(args: dict[str, Any]) -> list[TextContent]:
     })
 
 
-async def _handle_meas_set_expected_power(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_meas_set_expected_power(args: dict[str, Any]) -> CallToolResult:
     """Set expected power."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     power = args["power_dbm"]
@@ -1194,28 +1230,28 @@ async def _handle_meas_set_expected_power(args: dict[str, Any]) -> list[TextCont
     return _format_result({"status": "ok", "expected_power_dbm": power})
 
 
-async def _handle_meas_trigger(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_meas_trigger(args: dict[str, Any]) -> CallToolResult:
     """Trigger power measurement."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     await cmw.meas_trigger_power()
     return _format_result({"status": "ok", "measurement": "triggered"})
 
 
-async def _handle_meas_fetch_power(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_meas_fetch_power(args: dict[str, Any]) -> CallToolResult:
     """Fetch power results."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.meas_fetch_power()
     return _format_result(result.to_dict())
 
 
-async def _handle_meas_fetch_spectrum(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_meas_fetch_spectrum(args: dict[str, Any]) -> CallToolResult:
     """Fetch spectrum results."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.meas_fetch_spectrum()
     return _format_result(result)
 
 
-async def _handle_lte_configure_cell(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_configure_cell(args: dict[str, Any]) -> CallToolResult:
     """Configure LTE cell."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     config = CellConfig(
@@ -1228,28 +1264,28 @@ async def _handle_lte_configure_cell(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"status": "ok", "cell_config": config.to_dict()})
 
 
-async def _handle_lte_cell_on(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_cell_on(args: dict[str, Any]) -> CallToolResult:
     """Turn on LTE cell."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     await cmw.lte_cell_on()
     return _format_result({"status": "ok", "cell": "ON"})
 
 
-async def _handle_lte_cell_off(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_cell_off(args: dict[str, Any]) -> CallToolResult:
     """Turn off LTE cell."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     await cmw.lte_cell_off()
     return _format_result({"status": "ok", "cell": "OFF"})
 
 
-async def _handle_lte_get_connection_state(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_get_connection_state(args: dict[str, Any]) -> CallToolResult:
     """Get LTE connection state."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     state = await cmw.lte_get_connection_state()
     return _format_result({"connection_state": state.strip()})
 
 
-async def _handle_lte_configure_nas(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_configure_nas(args: dict[str, Any]) -> CallToolResult:
     """Configure NAS."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     mcc = sanitize_scpi_param(args.get("mcc", "001"))
@@ -1258,14 +1294,14 @@ async def _handle_lte_configure_nas(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"status": "ok", "mcc": mcc, "mnc": mnc})
 
 
-async def _handle_lte_configure_bearer(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_configure_bearer(args: dict[str, Any]) -> CallToolResult:
     """Configure bearer."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     await cmw.lte_configure_bearer()
     return _format_result({"status": "ok", "bearer": "configured"})
 
 
-async def _handle_lte_configure_cdrx(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_configure_cdrx(args: dict[str, Any]) -> CallToolResult:
     """Configure C-DRX."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     enabled = args.get("enabled", False)
@@ -1273,49 +1309,49 @@ async def _handle_lte_configure_cdrx(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"status": "ok", "cdrx": "enabled" if enabled else "disabled"})
 
 
-async def _handle_lte_get_ue_info(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_get_ue_info(args: dict[str, Any]) -> CallToolResult:
     """Get UE info."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     info = await cmw.lte_get_ue_info()
     return _format_result(info)
 
 
-async def _handle_lte_meas_configure(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_meas_configure(args: dict[str, Any]) -> CallToolResult:
     """Configure LTE measurement."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.lte_meas_configure()
     return _format_result(result)
 
 
-async def _handle_lte_meas_trigger(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_meas_trigger(args: dict[str, Any]) -> CallToolResult:
     """Trigger LTE measurement."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     await cmw.lte_meas_trigger()
     return _format_result({"status": "ok", "measurement": "lte_meval_triggered"})
 
 
-async def _handle_lte_meas_fetch_power(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_meas_fetch_power(args: dict[str, Any]) -> CallToolResult:
     """Fetch LTE power."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.lte_meas_fetch_power()
     return _format_result(result.to_dict())
 
 
-async def _handle_lte_meas_fetch_evm(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_meas_fetch_evm(args: dict[str, Any]) -> CallToolResult:
     """Fetch LTE EVM."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.lte_meas_fetch_evm()
     return _format_result(result.to_dict())
 
 
-async def _handle_lte_meas_fetch_aclr(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_meas_fetch_aclr(args: dict[str, Any]) -> CallToolResult:
     """Fetch LTE ACLR."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.lte_meas_fetch_aclr()
     return _format_result(result.to_dict())
 
 
-async def _handle_lte_meas_fetch_sem(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_meas_fetch_sem(args: dict[str, Any]) -> CallToolResult:
     """Fetch LTE SEM."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.lte_meas_fetch_sem()
@@ -1324,21 +1360,21 @@ async def _handle_lte_meas_fetch_sem(args: dict[str, Any]) -> list[TextContent]:
 
 async def _handle_lte_meas_fetch_frequency_error(
     args: dict[str, Any],
-) -> list[TextContent]:
+) -> CallToolResult:
     """Fetch LTE frequency error."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.lte_meas_fetch_frequency_error()
     return _format_result(result)
 
 
-async def _handle_lte_meas_fetch_all(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_lte_meas_fetch_all(args: dict[str, Any]) -> CallToolResult:
     """Fetch all LTE measurements."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     result = await cmw.lte_meas_fetch_all()
     return _format_result(result)
 
 
-async def _handle_set_signal_path(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_set_signal_path(args: dict[str, Any]) -> CallToolResult:
     """Set signal path."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     scenario_str = args["scenario"]
@@ -1349,14 +1385,14 @@ async def _handle_set_signal_path(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"status": "ok", "signal_path": scenario_str})
 
 
-async def _handle_get_signal_path(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_get_signal_path(args: dict[str, Any]) -> CallToolResult:
     """Get signal path."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     path = await cmw.get_signal_path()
     return _format_result({"signal_path": path.strip()})
 
 
-async def _handle_scpi_send(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_scpi_send(args: dict[str, Any]) -> CallToolResult:
     """Send raw SCPI command."""
     settings = get_settings()
     if not settings.allow_raw_scpi:
@@ -1373,7 +1409,7 @@ async def _handle_scpi_send(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"status": "ok", "command": command})
 
 
-async def _handle_scpi_query(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_scpi_query(args: dict[str, Any]) -> CallToolResult:
     """Send raw SCPI query."""
     settings = get_settings()
     if not settings.allow_raw_scpi:
@@ -1390,21 +1426,43 @@ async def _handle_scpi_query(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"command": command, "response": response})
 
 
-async def _handle_reset(args: dict[str, Any]) -> list[TextContent]:
-    """Reset CMW500."""
+async def _handle_reset(args: dict[str, Any]) -> CallToolResult:
+    """Reset CMW500.
+
+    Uses configurable timeout (preset_timeout) to prevent hanging indefinitely.
+    """
+    settings = get_settings()
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    await cmw.reset()
+    try:
+        await asyncio.wait_for(cmw.reset(), timeout=settings.preset_timeout)
+    except asyncio.TimeoutError:
+        raise CMW500Error(
+            f"Reset operation timed out after {settings.preset_timeout}s. "
+            "The CMW500 may be unresponsive. Configure CMW_PRESET_TIMEOUT "
+            "to increase the timeout."
+        )
     return _format_result({"status": "ok", "action": "reset"})
 
 
-async def _handle_preset(args: dict[str, Any]) -> list[TextContent]:
-    """Preset CMW500."""
+async def _handle_preset(args: dict[str, Any]) -> CallToolResult:
+    """Preset CMW500.
+
+    Uses configurable timeout (preset_timeout) to prevent hanging indefinitely.
+    """
+    settings = get_settings()
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    await cmw.preset()
+    try:
+        await asyncio.wait_for(cmw.preset(), timeout=settings.preset_timeout)
+    except asyncio.TimeoutError:
+        raise CMW500Error(
+            f"Preset operation timed out after {settings.preset_timeout}s. "
+            "The CMW500 may be unresponsive. Configure CMW_PRESET_TIMEOUT "
+            "to increase the timeout."
+        )
     return _format_result({"status": "ok", "action": "preset"})
 
 
-async def _handle_list_templates(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_list_templates(args: dict[str, Any]) -> CallToolResult:
     """List available templates."""
     global _current_template
     templates = []
@@ -1412,13 +1470,14 @@ async def _handle_list_templates(args: dict[str, Any]) -> list[TextContent]:
         instance = cls()
         templates.append(instance.get_summary())
 
-    result: dict[str, Any] = {"templates": templates}
-    if _current_template:
-        result["current_template"] = _current_template.get_summary()
+    async with _template_lock:
+        result: dict[str, Any] = {"templates": templates}
+        if _current_template:
+            result["current_template"] = _current_template.get_summary()
     return _format_result(result)
 
 
-async def _handle_load_template(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_load_template(args: dict[str, Any]) -> CallToolResult:
     """Load a template."""
     global _current_template
     template_name = args["template_name"]
@@ -1428,33 +1487,36 @@ async def _handle_load_template(args: dict[str, Any]) -> list[TextContent]:
         return _format_error(ValueError(f"Unknown template: {template_name}"))
 
     cls = _template_registry[template_name]
-    _current_template = cls()
 
-    # Apply parameter overrides
-    if params:
-        _current_template.parameters.update(params)
+    async with _template_lock:
+        _current_template = cls()
 
-    return _format_result({
-        "status": "ok",
-        "template": _current_template.get_summary(),
-    })
+        # Apply parameter overrides
+        if params:
+            _current_template.parameters.update(params)
+
+        return _format_result({
+            "status": "ok",
+            "template": _current_template.get_summary(),
+        })
 
 
-async def _handle_apply_template(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_apply_template(args: dict[str, Any]) -> CallToolResult:
     """Apply loaded template."""
     global _current_template
-    if _current_template is None:
-        return _format_error(ValueError("No template loaded. Use cmw_load_template first."))
+    async with _template_lock:
+        if _current_template is None:
+            return _format_error(ValueError("No template loaded. Use cmw_load_template first."))
 
-    cmw = await _get_cmw(args.get("host"), args.get("port"))
-    await _current_template.apply(cmw)
-    return _format_result({
-        "status": "ok",
-        "template_applied": _current_template.name,
-    })
+        cmw = await _get_cmw(args.get("host"), args.get("port"))
+        await _current_template.apply(cmw)
+        return _format_result({
+            "status": "ok",
+            "template_applied": _current_template.name,
+        })
 
 
-async def _handle_define_limit(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_define_limit(args: dict[str, Any]) -> CallToolResult:
     """Define a limit."""
     name = args["name"]
     parameter = args["parameter"]
@@ -1470,7 +1532,8 @@ async def _handle_define_limit(args: dict[str, Any]) -> list[TextContent]:
         name=name,
     )
     limit = LimitLine(name=name, segments=[segment])
-    _limit_manager.add_limit(limit)
+    async with _measurement_lock:
+        _limit_manager.add_limit(limit)
 
     return _format_result({
         "status": "ok",
@@ -1481,33 +1544,36 @@ async def _handle_define_limit(args: dict[str, Any]) -> list[TextContent]:
     })
 
 
-async def _handle_check_limits(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_check_limits(args: dict[str, Any]) -> CallToolResult:
     """Check measurements against limits."""
     measurements = args["measurements"]
     # Convert to float dict
     float_measurements = {k: float(v) for k, v in measurements.items()}
-    result = _limit_manager.get_overall_status(float_measurements)
+    async with _measurement_lock:
+        result = _limit_manager.get_overall_status(float_measurements)
     return _format_result(result)
 
 
-async def _handle_clear_limits(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_clear_limits(args: dict[str, Any]) -> CallToolResult:
     """Clear all limits."""
-    _limit_manager.clear_limits()
+    async with _measurement_lock:
+        _limit_manager.clear_limits()
     return _format_result({"status": "ok", "action": "limits_cleared"})
 
 
-async def _handle_list_limits(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_list_limits(args: dict[str, Any]) -> CallToolResult:
     """List all limits."""
-    limit_names = _limit_manager.list_limits()
-    limits_detail = []
-    for name in limit_names:
-        limit = _limit_manager.get_limit(name)
-        if limit:
-            limits_detail.append(limit.to_dict())
+    async with _measurement_lock:
+        limit_names = _limit_manager.list_limits()
+        limits_detail = []
+        for name in limit_names:
+            limit = _limit_manager.get_limit(name)
+            if limit:
+                limits_detail.append(limit.to_dict())
     return _format_result({"limits": limits_detail, "count": len(limits_detail)})
 
 
-async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_save_state(args: dict[str, Any]) -> CallToolResult:
     """Save CMW500 state."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     filename = Path(args["filename"]).name  # strip directory components
@@ -1529,7 +1595,7 @@ async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
     })
 
 
-async def _handle_load_state(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_load_state(args: dict[str, Any]) -> CallToolResult:
     """Load and restore CMW500 state."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     filename = Path(args["filename"]).name  # strip directory components
@@ -1548,7 +1614,7 @@ async def _handle_load_state(args: dict[str, Any]) -> list[TextContent]:
     })
 
 
-async def _handle_get_full_state(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_get_full_state(args: dict[str, Any]) -> CallToolResult:
     """Get full CMW500 state."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     state = await _state_manager.capture_state(cmw)
