@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rs-cmw500": {
+      "command": "uv",
+      "args": ["--directory", "/home/swamp/projects/github/mcp-rs-cmw500", "run", "rs-cmw500-mcp"]
+    }
+  }
+}
