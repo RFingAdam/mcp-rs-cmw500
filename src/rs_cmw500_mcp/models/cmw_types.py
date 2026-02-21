@@ -15,7 +15,7 @@ class CMW500Family(Enum):
     CMW500 = "CMW500"  # Full wideband tester
     CMW290 = "CMW290"  # Functional tester (subset)
     CMW270 = "CMW270"  # Wireless connectivity tester
-    CMW100 = "cmw100"  # Compact wideband tester
+    CMW100 = "CMW100"  # Compact wideband tester
 
     @property
     def supports_signaling(self) -> bool:
@@ -28,7 +28,7 @@ class Technology(Enum):
 
     LTE_FDD = "LTE"
     LTE_TDD = "LTEA"
-    NR5G = "nr5g"  # 5G New Radio
+    NR5G = "NR5G"  # 5G New Radio
     WCDMA = "WCDMA"
     GSM = "GSM"
     WLAN = "WLAN"

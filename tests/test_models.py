@@ -29,7 +29,7 @@ class TestCMW500Family:
         assert CMW500Family.CMW270.supports_signaling is False
 
     def test_cmw100_member(self):
-        assert CMW500Family.CMW100.value == "cmw100"
+        assert CMW500Family.CMW100.value == "CMW100"
         assert CMW500Family.CMW100.supports_signaling is False
 
 
@@ -42,7 +42,7 @@ class TestTechnology:
         assert Technology.WLAN.value == "WLAN"
 
     def test_nr5g_member(self):
-        assert Technology.NR5G.value == "nr5g"
+        assert Technology.NR5G.value == "NR5G"
 
 
 class TestLTEBandwidth:

@@ -370,11 +370,10 @@ class CMW500Driver:
             f"CONFigure:GPRF:MEASurement1:POWer:REPetition {repetition.value}"
         )
 
-    async def meas_configure_spectrum(self) -> None:
-        """Configure GPRF spectrum measurement (placeholder for future expansion)."""
-        # Spectrum measurements are typically configured through the power measurement
-        # subsystem on the CMW500 with additional frequency settings
-        logger.info("Spectrum measurement configuration applied")
+    async def meas_configure_spectrum(self) -> dict[str, str]:
+        """Configure GPRF spectrum measurement (not yet fully implemented)."""
+        logger.warning("Spectrum measurement configuration is a placeholder")
+        return {"status": "placeholder", "note": "Spectrum config not yet implemented"}
 
     async def meas_trigger_power(self) -> None:
         """Initiate GPRF power measurement."""
@@ -558,10 +557,10 @@ class CMW500Driver:
     # LTE Measurement
     # =========================================================================
 
-    async def lte_meas_configure(self) -> None:
-        """Configure LTE multi-evaluation measurement."""
-        # Multi-evaluation is the standard LTE measurement suite
-        logger.info("LTE multi-evaluation measurement configured")
+    async def lte_meas_configure(self) -> dict[str, str]:
+        """Configure LTE multi-evaluation measurement (not yet fully implemented)."""
+        logger.warning("LTE multi-evaluation measurement configuration is a placeholder")
+        return {"status": "placeholder", "note": "LTE measurement config not yet implemented"}
 
     async def lte_meas_trigger(self) -> None:
         """Trigger LTE multi-evaluation measurement."""
@@ -668,13 +667,12 @@ class CMW500Driver:
         """
         try:
             response = await self._scpi.query(
-                "FETCh:LTE:MEAS1:MEValuation:MODulation:CURRent?"
+                "FETCh:LTE:MEAS1:MEValuation:FERRor:CURRent?"
             )
             parts = response.split(",")
             result: dict[str, Any] = {"reliability": parts[0].strip() if parts else ""}
-            # Frequency error is typically part of modulation results
-            if len(parts) >= 4:
-                result["frequency_error_hz"] = _parse_float(parts[3], "freq_error")
+            if len(parts) >= 2:
+                result["frequency_error_hz"] = _parse_float(parts[1], "freq_error")
             return result
         except Exception as e:
             logger.warning(f"Failed to fetch frequency error: {e}")

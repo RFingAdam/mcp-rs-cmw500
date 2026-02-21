@@ -1,6 +1,8 @@
 """MCP tool definitions and handlers for CMW500 operations."""
 
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from mcp.types import TextContent, Tool
@@ -65,6 +67,11 @@ async def _get_cmw(
         cmw = _cmw_connections[key]
         if cmw.is_connected:
             return cmw
+        # Clean up stale connection
+        try:
+            await cmw.disconnect()
+        except Exception:
+            pass
 
     # Create new connection
     cmw = CMW500Driver(
@@ -91,8 +98,6 @@ async def _close_cmw(host: str, port: int) -> bool:
 
 def _format_result(result: Any) -> list[TextContent]:
     """Format result as MCP TextContent."""
-    import json
-
     if isinstance(result, dict):
         text = json.dumps(result, indent=2, default=str)
     elif isinstance(result, list):
@@ -1164,8 +1169,8 @@ async def _handle_meas_configure_power(args: dict[str, Any]) -> list[TextContent
 async def _handle_meas_configure_spectrum(args: dict[str, Any]) -> list[TextContent]:
     """Configure spectrum measurement."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    await cmw.meas_configure_spectrum()
-    return _format_result({"status": "ok", "measurement": "spectrum_configured"})
+    result = await cmw.meas_configure_spectrum()
+    return _format_result(result)
 
 
 async def _handle_meas_set_frequency(args: dict[str, Any]) -> list[TextContent]:
@@ -1277,8 +1282,8 @@ async def _handle_lte_get_ue_info(args: dict[str, Any]) -> list[TextContent]:
 async def _handle_lte_meas_configure(args: dict[str, Any]) -> list[TextContent]:
     """Configure LTE measurement."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    await cmw.lte_meas_configure()
-    return _format_result({"status": "ok", "measurement": "lte_meval_configured"})
+    result = await cmw.lte_meas_configure()
+    return _format_result(result)
 
 
 async def _handle_lte_meas_trigger(args: dict[str, Any]) -> list[TextContent]:
@@ -1486,13 +1491,16 @@ async def _handle_list_limits(args: dict[str, Any]) -> list[TextContent]:
 async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
     """Save CMW500 state."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    filename = args["filename"]
+    filename = Path(args["filename"]).name  # strip directory components
     notes = args.get("notes", "")
+
+    filepath = _state_manager.state_directory / f"{filename}.json"
+    if not filepath.resolve().is_relative_to(_state_manager.state_directory.resolve()):
+        return _format_error(ValueError("Invalid filename"))
 
     state = await _state_manager.capture_state(cmw)
     state.notes = notes
 
-    filepath = _state_manager.state_directory / f"{filename}.json"
     state.save(filepath)
 
     return _format_result({
@@ -1505,9 +1513,12 @@ async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
 async def _handle_load_state(args: dict[str, Any]) -> list[TextContent]:
     """Load and restore CMW500 state."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    filename = args["filename"]
+    filename = Path(args["filename"]).name  # strip directory components
 
     filepath = _state_manager.state_directory / f"{filename}.json"
+    if not filepath.resolve().is_relative_to(_state_manager.state_directory.resolve()):
+        return _format_error(ValueError("Invalid filename"))
+
     state = InstrumentState.load(filepath)
     await _state_manager.restore_state(cmw, state)
 

@@ -142,4 +142,13 @@ class SafetyValidator:
                 limit=self.limits.max_generator_power_dbm,
             )
 
+        if level_dbm < self.limits.min_generator_power_dbm:
+            raise SafetyError(
+                f"DL level {level_dbm} dBm below minimum "
+                f"{self.limits.min_generator_power_dbm} dBm",
+                parameter="dl_level_dbm",
+                value=level_dbm,
+                limit=self.limits.min_generator_power_dbm,
+            )
+
         logger.debug(f"DL level {level_dbm} dBm validated")
