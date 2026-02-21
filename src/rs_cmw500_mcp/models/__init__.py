@@ -3,8 +3,11 @@
 from .cmw_types import (
     ACLRResult,
     BERResult,
+    BLERResult,
     CellConfig,
+    CellState,
     CMW500Family,
+    ConnectionState,
     EVMResult,
     InstrumentInfo,
     LTEBandwidth,
@@ -19,8 +22,11 @@ from .cmw_types import (
 __all__ = [
     "ACLRResult",
     "BERResult",
+    "BLERResult",
     "CellConfig",
+    "CellState",
     "CMW500Family",
+    "ConnectionState",
     "EVMResult",
     "InstrumentInfo",
     "LTEBandwidth",

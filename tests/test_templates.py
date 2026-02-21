@@ -7,6 +7,7 @@ from rs_cmw500_mcp.templates.base import MeasurementTemplate
 from rs_cmw500_mcp.templates.gprf_power import GPRFPowerTemplate
 from rs_cmw500_mcp.templates.lte_tx import LTETxPowerTemplate
 from rs_cmw500_mcp.templates.nonsig_rx import NonSignalingRxTemplate
+from rs_cmw500_mcp.templates.wlan_tx import WLANTxTemplate
 
 
 class TestMeasurementTemplate:
@@ -173,3 +174,62 @@ class TestNonSignalingRxTemplate:
             assert isinstance(loaded, NonSignalingRxTemplate)
         finally:
             Path(filepath).unlink(missing_ok=True)
+
+
+class TestWLANTxTemplate:
+    """Test WLANTxTemplate."""
+
+    def test_defaults(self):
+        template = WLANTxTemplate()
+        assert template.name == "WLAN 802.11ax 80 MHz TX"
+        assert template.technology == "WLAN"
+        assert "bandwidth_mhz" in template.parameters
+        assert "standard" in template.parameters
+        assert template.parameters["standard"] == "802.11ax"
+
+    def test_wifi6_80mhz(self):
+        template = WLANTxTemplate.wifi6_80mhz()
+        assert template.name == "WLAN 802.11ax 80 MHz TX"
+        assert template.parameters["standard"] == "802.11ax"
+        assert template.parameters["bandwidth_mhz"] == 80
+        assert template.parameters["frequency_hz"] == 5.18e9
+
+    def test_wifi6_40mhz(self):
+        template = WLANTxTemplate.wifi6_40mhz()
+        assert template.name == "WLAN 802.11ax 40 MHz TX"
+        assert template.parameters["standard"] == "802.11ax"
+        assert template.parameters["bandwidth_mhz"] == 40
+        assert template.parameters["frequency_hz"] == 5.19e9
+
+    def test_wifi5_80mhz(self):
+        template = WLANTxTemplate.wifi5_80mhz()
+        assert template.name == "WLAN 802.11ac 80 MHz TX"
+        assert template.parameters["standard"] == "802.11ac"
+        assert template.parameters["bandwidth_mhz"] == 80
+
+    def test_to_dict(self):
+        template = WLANTxTemplate()
+        d = template.to_dict()
+        assert d["template_type"] == "WLANTxTemplate"
+        assert d["technology"] == "WLAN"
+
+    def test_save_and_load(self):
+        template = WLANTxTemplate.wifi6_80mhz()
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            filepath = f.name
+
+        try:
+            template.save(filepath)
+            loaded = MeasurementTemplate.load(filepath)
+            assert isinstance(loaded, WLANTxTemplate)
+            assert loaded.parameters["bandwidth_mhz"] == 80
+        finally:
+            Path(filepath).unlink(missing_ok=True)
+
+    def test_get_summary(self):
+        template = WLANTxTemplate.wifi6_80mhz()
+        summary = template.get_summary()
+        assert summary["name"] == "WLAN 802.11ax 80 MHz TX"
+        assert summary["technology"] == "WLAN"
+        assert summary["template_type"] == "WLANTxTemplate"

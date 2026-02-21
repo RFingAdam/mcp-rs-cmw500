@@ -15,6 +15,7 @@ class CMW500Family(Enum):
     CMW500 = "CMW500"  # Full wideband tester
     CMW290 = "CMW290"  # Functional tester (subset)
     CMW270 = "CMW270"  # Wireless connectivity tester
+    CMW100 = "cmw100"  # Compact wideband tester
 
     @property
     def supports_signaling(self) -> bool:
@@ -27,6 +28,7 @@ class Technology(Enum):
 
     LTE_FDD = "LTE"
     LTE_TDD = "LTEA"
+    NR5G = "nr5g"  # 5G New Radio
     WCDMA = "WCDMA"
     GSM = "GSM"
     WLAN = "WLAN"
@@ -44,7 +46,7 @@ class MeasurementMode(Enum):
 class LTEBandwidth(Enum):
     """LTE channel bandwidths."""
 
-    BW1P4 = "B014"  # 1.4 MHz
+    BW1_4 = "B014"  # 1.4 MHz
     BW3 = "B030"  # 3 MHz
     BW5 = "B050"  # 5 MHz
     BW10 = "B100"  # 10 MHz
@@ -68,7 +70,7 @@ class LTEBandwidth(Enum):
     def from_mhz(cls, mhz: float) -> "LTEBandwidth":
         """Create from MHz value."""
         mhz_map = {
-            1.4: cls.BW1P4,
+            1.4: cls.BW1_4,
             3.0: cls.BW3,
             5.0: cls.BW5,
             10.0: cls.BW10,
@@ -329,3 +331,62 @@ class RFConfig:
             level_dbm=data.get("level_dbm", -60.0),
             external_attenuation_db=data.get("external_attenuation_db", 0.0),
         )
+
+
+@dataclass
+class BLERResult:
+    """Block Error Rate measurement result."""
+
+    bler: float = 0.0
+    total_blocks: int = 0
+    error_blocks: int = 0
+    reliability: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "bler": self.bler,
+            "total_blocks": self.total_blocks,
+            "error_blocks": self.error_blocks,
+            "reliability": self.reliability,
+        }
+
+
+@dataclass
+class CellState:
+    """LTE cell state information."""
+
+    cell_active: bool = False
+    cell_state: str = "OFF"  # ON, OFF, ADJ
+    band: int = 1
+    bandwidth_mhz: float = 10.0
+    dl_earfcn: int = 0
+    dl_level_dbm: float = -60.0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "cell_active": self.cell_active,
+            "cell_state": self.cell_state,
+            "band": self.band,
+            "bandwidth_mhz": self.bandwidth_mhz,
+            "dl_earfcn": self.dl_earfcn,
+            "dl_level_dbm": self.dl_level_dbm,
+        }
+
+
+@dataclass
+class ConnectionState:
+    """UE connection state information."""
+
+    connected: bool = False
+    connection_state: str = "IDLE"  # ATT, CONN, IDLE
+    registered: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "connected": self.connected,
+            "connection_state": self.connection_state,
+            "registered": self.registered,
+        }

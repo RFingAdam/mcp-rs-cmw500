@@ -21,6 +21,7 @@ from .templates import (
     LTETxPowerTemplate,
     MeasurementTemplate,
     NonSignalingRxTemplate,
+    WLANTxTemplate,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ _template_registry: dict[str, type] = {
     "lte_tx_power": LTETxPowerTemplate,
     "gprf_power": GPRFPowerTemplate,
     "nonsig_rx": NonSignalingRxTemplate,
+    "wlan_tx": WLANTxTemplate,
 }
 
 
@@ -721,7 +723,7 @@ def get_tools() -> list[Tool]:
                     "template_name": {
                         "type": "string",
                         "description": "Template name",
-                        "enum": ["lte_tx_power", "gprf_power", "nonsig_rx"],
+                        "enum": ["lte_tx_power", "gprf_power", "nonsig_rx", "wlan_tx"],
                     },
                     "parameters": {
                         "type": "object",

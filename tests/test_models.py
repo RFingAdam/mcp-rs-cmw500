@@ -4,8 +4,11 @@ import pytest
 
 from rs_cmw500_mcp.models.cmw_types import (
     ACLRResult,
+    BLERResult,
     CellConfig,
+    CellState,
     CMW500Family,
+    ConnectionState,
     EVMResult,
     InstrumentInfo,
     LTEBandwidth,
@@ -25,6 +28,10 @@ class TestCMW500Family:
         assert CMW500Family.CMW290.supports_signaling is False
         assert CMW500Family.CMW270.supports_signaling is False
 
+    def test_cmw100_member(self):
+        assert CMW500Family.CMW100.value == "cmw100"
+        assert CMW500Family.CMW100.supports_signaling is False
+
 
 class TestTechnology:
     """Test Technology enum."""
@@ -34,12 +41,15 @@ class TestTechnology:
         assert Technology.GPRF.value == "GPRF"
         assert Technology.WLAN.value == "WLAN"
 
+    def test_nr5g_member(self):
+        assert Technology.NR5G.value == "nr5g"
+
 
 class TestLTEBandwidth:
     """Test LTEBandwidth enum."""
 
     def test_mhz_property(self):
-        assert LTEBandwidth.BW1P4.mhz == 1.4
+        assert LTEBandwidth.BW1_4.mhz == 1.4
         assert LTEBandwidth.BW5.mhz == 5.0
         assert LTEBandwidth.BW10.mhz == 10.0
         assert LTEBandwidth.BW20.mhz == 20.0
@@ -47,7 +57,7 @@ class TestLTEBandwidth:
     def test_from_mhz(self):
         assert LTEBandwidth.from_mhz(10.0) == LTEBandwidth.BW10
         assert LTEBandwidth.from_mhz(20.0) == LTEBandwidth.BW20
-        assert LTEBandwidth.from_mhz(1.4) == LTEBandwidth.BW1P4
+        assert LTEBandwidth.from_mhz(1.4) == LTEBandwidth.BW1_4
 
     def test_from_mhz_invalid(self):
         with pytest.raises(ValueError, match="Invalid LTE bandwidth"):
@@ -204,3 +214,103 @@ class TestRFConfig:
     def test_from_dict(self):
         config = RFConfig.from_dict({"frequency_hz": 5.8e9})
         assert config.frequency_hz == 5.8e9
+
+
+class TestBLERResult:
+    """Test BLERResult model."""
+
+    def test_defaults(self):
+        result = BLERResult()
+        assert result.bler == 0.0
+        assert result.total_blocks == 0
+        assert result.error_blocks == 0
+        assert result.reliability == ""
+
+    def test_to_dict(self):
+        result = BLERResult(
+            bler=0.05,
+            total_blocks=1000,
+            error_blocks=50,
+            reliability="OK",
+        )
+        d = result.to_dict()
+        assert d["bler"] == 0.05
+        assert d["total_blocks"] == 1000
+        assert d["error_blocks"] == 50
+        assert d["reliability"] == "OK"
+
+    def test_to_dict_all_fields_present(self):
+        result = BLERResult()
+        d = result.to_dict()
+        assert "bler" in d
+        assert "total_blocks" in d
+        assert "error_blocks" in d
+        assert "reliability" in d
+
+
+class TestCellState:
+    """Test CellState model."""
+
+    def test_defaults(self):
+        state = CellState()
+        assert state.cell_active is False
+        assert state.cell_state == "OFF"
+        assert state.band == 1
+        assert state.bandwidth_mhz == 10.0
+        assert state.dl_earfcn == 0
+        assert state.dl_level_dbm == -60.0
+
+    def test_to_dict(self):
+        state = CellState(
+            cell_active=True,
+            cell_state="ON",
+            band=7,
+            bandwidth_mhz=20.0,
+            dl_earfcn=3100,
+            dl_level_dbm=-50.0,
+        )
+        d = state.to_dict()
+        assert d["cell_active"] is True
+        assert d["cell_state"] == "ON"
+        assert d["band"] == 7
+        assert d["bandwidth_mhz"] == 20.0
+        assert d["dl_earfcn"] == 3100
+        assert d["dl_level_dbm"] == -50.0
+
+    def test_to_dict_all_fields_present(self):
+        state = CellState()
+        d = state.to_dict()
+        assert "cell_active" in d
+        assert "cell_state" in d
+        assert "band" in d
+        assert "bandwidth_mhz" in d
+        assert "dl_earfcn" in d
+        assert "dl_level_dbm" in d
+
+
+class TestConnectionState:
+    """Test ConnectionState model."""
+
+    def test_defaults(self):
+        state = ConnectionState()
+        assert state.connected is False
+        assert state.connection_state == "IDLE"
+        assert state.registered is False
+
+    def test_to_dict(self):
+        state = ConnectionState(
+            connected=True,
+            connection_state="CONN",
+            registered=True,
+        )
+        d = state.to_dict()
+        assert d["connected"] is True
+        assert d["connection_state"] == "CONN"
+        assert d["registered"] is True
+
+    def test_to_dict_all_fields_present(self):
+        state = ConnectionState()
+        d = state.to_dict()
+        assert "connected" in d
+        assert "connection_state" in d
+        assert "registered" in d

@@ -216,6 +216,14 @@ class TestToolHandlers:
         assert "ok" in result[0].text
 
     @pytest.mark.asyncio
+    async def test_load_wlan_tx_template(self):
+        """Test loading the WLAN TX template."""
+        result = await handle_tool("cmw_load_template", {
+            "template_name": "wlan_tx",
+        })
+        assert "ok" in result[0].text
+
+    @pytest.mark.asyncio
     async def test_load_unknown_template(self):
         """Test loading an unknown template."""
         result = await handle_tool("cmw_load_template", {

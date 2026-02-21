@@ -90,6 +90,10 @@ class MeasurementTemplate:
             from .gprf_power import GPRFPowerTemplate
 
             return GPRFPowerTemplate.from_dict(data)
+        elif template_type == "WLANTxTemplate":
+            from .wlan_tx import WLANTxTemplate
+
+            return WLANTxTemplate.from_dict(data)
         else:
             return cls.from_dict(data)
 
