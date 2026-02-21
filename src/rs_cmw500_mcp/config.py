@@ -41,6 +41,12 @@ class CMWSettings(BaseSettings):
     max_frequency_hz: float = Field(default=6e9, description="Maximum frequency in Hz")
     min_frequency_hz: float = Field(default=70e6, description="Minimum frequency in Hz")
 
+    # Raw SCPI access
+    allow_raw_scpi: bool = Field(
+        default=True,
+        description="Allow raw SCPI command execution (default: True for backwards compat)",
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Log level")
 

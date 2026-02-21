@@ -19,7 +19,7 @@ from ..models.cmw_types import (
     SEMResult,
     SignalPath,
 )
-from ..safety.validators import SafetyLimits, SafetyValidator
+from ..safety.validators import SafetyLimits, SafetyValidator, sanitize_scpi_param
 from .scpi_socket import SCPISocket
 
 logger = logging.getLogger(__name__)
@@ -286,6 +286,7 @@ class CMW500Driver:
         Args:
             file_path: Path to ARB file on CMW500
         """
+        sanitize_scpi_param(file_path)
         await self._scpi.send(f"SOURce:GPRF:GENerator1:ARB:FILE '{file_path}'")
 
     async def gen_configure_arb(
@@ -522,6 +523,8 @@ class CMW500Driver:
             mcc: Mobile Country Code
             mnc: Mobile Network Code
         """
+        sanitize_scpi_param(mcc)
+        sanitize_scpi_param(mnc)
         await self._scpi.send(f"CONFigure:LTE:SIGN1:NAS:MCC {mcc}")
         await self._scpi.send(f"CONFigure:LTE:SIGN1:NAS:MNC {mnc}")
 

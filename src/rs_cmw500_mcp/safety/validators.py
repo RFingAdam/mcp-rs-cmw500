@@ -1,11 +1,99 @@
 """Safety validators for CMW500 parameters."""
 
 import logging
+import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..exceptions import SafetyError
 
 logger = logging.getLogger(__name__)
+
+
+# SCPI metacharacters that could be used for command injection
+_SCPI_DANGEROUS_CHARS = re.compile(r"[;\n\r]")
+
+
+def sanitize_scpi_param(value: str) -> str:
+    """
+    Sanitize a user-provided string parameter before interpolation into SCPI commands.
+
+    Rejects strings containing SCPI metacharacters that could enable command injection:
+    - `;` (SCPI command separator - could chain arbitrary commands)
+    - `\\n` and `\\r` (newlines - could inject commands on new lines)
+    - Leading `*` (could trigger instrument commands like *RST, *CLS, *OPC)
+
+    Numeric/float parameters validated by SafetyValidator do not need this check.
+    This is for string parameters like filenames, identifiers, MCC/MNC codes, etc.
+
+    Args:
+        value: User-provided string parameter
+
+    Returns:
+        The original string if it passes validation
+
+    Raises:
+        ValueError: If the string contains dangerous SCPI metacharacters
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"Expected string parameter, got {type(value).__name__}")
+
+    if _SCPI_DANGEROUS_CHARS.search(value):
+        raise ValueError(
+            f"SCPI parameter contains prohibited characters (semicolons, newlines): "
+            f"{value!r}"
+        )
+
+    if value.lstrip().startswith("*"):
+        raise ValueError(
+            f"SCPI parameter must not start with '*' (could trigger instrument commands): "
+            f"{value!r}"
+        )
+
+    return value
+
+
+def validate_safe_path(user_path: str | Path, base_dir: str | Path) -> Path:
+    """
+    Validate that a user-provided path resolves safely within the base directory.
+
+    Guards against directory traversal attacks (../) , absolute path escapes,
+    and symlinks pointing outside the allowed base directory.
+
+    Args:
+        user_path: User-provided file path or filename
+        base_dir: Base directory that the resolved path must stay within
+
+    Returns:
+        The resolved, validated Path
+
+    Raises:
+        ValueError: If the path escapes the base directory or is otherwise unsafe
+    """
+    base = Path(base_dir).resolve()
+    resolved = (base / Path(user_path)).resolve()
+
+    # Check that resolved path is within base directory
+    if not resolved.is_relative_to(base):
+        raise ValueError(
+            f"Path traversal detected: resolved path {resolved} "
+            f"is not within base directory {base}"
+        )
+
+    # Check for symlinks that point outside base_dir
+    # Walk up the path checking each component that exists
+    check_path = resolved
+    while check_path != base and check_path != check_path.parent:
+        if check_path.is_symlink():
+            link_target = check_path.resolve()
+            if not link_target.is_relative_to(base):
+                raise ValueError(
+                    f"Symlink escape detected: {check_path} points to "
+                    f"{link_target} which is outside {base}"
+                )
+        check_path = check_path.parent
+
+    return resolved
 
 
 @dataclass

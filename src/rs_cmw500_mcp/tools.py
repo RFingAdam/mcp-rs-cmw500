@@ -17,6 +17,7 @@ from .models.cmw_types import (
     MeasRepetition,
     SignalPath,
 )
+from .safety.validators import sanitize_scpi_param, validate_safe_path
 from .state import InstrumentState, StateManager
 from .templates import (
     GPRFPowerTemplate,
@@ -1133,7 +1134,7 @@ async def _handle_gen_output_off(args: dict[str, Any]) -> list[TextContent]:
 async def _handle_gen_load_arb(args: dict[str, Any]) -> list[TextContent]:
     """Load ARB file."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    file_path = args["file_path"]
+    file_path = sanitize_scpi_param(args["file_path"])
     await cmw.gen_load_arb(file_path)
     return _format_result({"status": "ok", "arb_file": file_path})
 
@@ -1251,8 +1252,8 @@ async def _handle_lte_get_connection_state(args: dict[str, Any]) -> list[TextCon
 async def _handle_lte_configure_nas(args: dict[str, Any]) -> list[TextContent]:
     """Configure NAS."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    mcc = args.get("mcc", "001")
-    mnc = args.get("mnc", "01")
+    mcc = sanitize_scpi_param(args.get("mcc", "001"))
+    mnc = sanitize_scpi_param(args.get("mnc", "01"))
     await cmw.lte_configure_nas(mcc, mnc)
     return _format_result({"status": "ok", "mcc": mcc, "mnc": mnc})
 
@@ -1357,16 +1358,34 @@ async def _handle_get_signal_path(args: dict[str, Any]) -> list[TextContent]:
 
 async def _handle_scpi_send(args: dict[str, Any]) -> list[TextContent]:
     """Send raw SCPI command."""
+    settings = get_settings()
+    if not settings.allow_raw_scpi:
+        return _format_error(
+            ValueError(
+                "Raw SCPI access is disabled. Set CMW_ALLOW_RAW_SCPI=true to enable."
+            )
+        )
+
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     command = args["command"]
+    logger.warning(f"Raw SCPI send: {command!r}")
     await cmw.scpi_send(command)
     return _format_result({"status": "ok", "command": command})
 
 
 async def _handle_scpi_query(args: dict[str, Any]) -> list[TextContent]:
     """Send raw SCPI query."""
+    settings = get_settings()
+    if not settings.allow_raw_scpi:
+        return _format_error(
+            ValueError(
+                "Raw SCPI access is disabled. Set CMW_ALLOW_RAW_SCPI=true to enable."
+            )
+        )
+
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     command = args["command"]
+    logger.warning(f"Raw SCPI query: {command!r}")
     response = await cmw.scpi_query(command)
     return _format_result({"command": command, "response": response})
 
@@ -1494,9 +1513,9 @@ async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
     filename = Path(args["filename"]).name  # strip directory components
     notes = args.get("notes", "")
 
-    filepath = _state_manager.state_directory / f"{filename}.json"
-    if not filepath.resolve().is_relative_to(_state_manager.state_directory.resolve()):
-        return _format_error(ValueError("Invalid filename"))
+    filepath = validate_safe_path(
+        f"{filename}.json", _state_manager.state_directory
+    )
 
     state = await _state_manager.capture_state(cmw)
     state.notes = notes
@@ -1515,9 +1534,9 @@ async def _handle_load_state(args: dict[str, Any]) -> list[TextContent]:
     cmw = await _get_cmw(args.get("host"), args.get("port"))
     filename = Path(args["filename"]).name  # strip directory components
 
-    filepath = _state_manager.state_directory / f"{filename}.json"
-    if not filepath.resolve().is_relative_to(_state_manager.state_directory.resolve()):
-        return _format_error(ValueError("Invalid filename"))
+    filepath = validate_safe_path(
+        f"{filename}.json", _state_manager.state_directory
+    )
 
     state = InstrumentState.load(filepath)
     await _state_manager.restore_state(cmw, state)
