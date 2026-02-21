@@ -183,29 +183,29 @@ class TestWLANTxTemplate:
         template = WLANTxTemplate()
         assert template.name == "WLAN 802.11ax 80 MHz TX"
         assert template.technology == "WLAN"
-        assert "bandwidth_mhz" in template.parameters
+        assert "bandwidth" in template.parameters
         assert "standard" in template.parameters
-        assert template.parameters["standard"] == "802.11ax"
+        assert template.parameters["standard"] == "AX"
 
     def test_wifi6_80mhz(self):
         template = WLANTxTemplate.wifi6_80mhz()
         assert template.name == "WLAN 802.11ax 80 MHz TX"
-        assert template.parameters["standard"] == "802.11ax"
-        assert template.parameters["bandwidth_mhz"] == 80
+        assert template.parameters["standard"] == "AX"
+        assert template.parameters["bandwidth"] == "BW80"
         assert template.parameters["frequency_hz"] == 5.18e9
 
     def test_wifi6_40mhz(self):
         template = WLANTxTemplate.wifi6_40mhz()
         assert template.name == "WLAN 802.11ax 40 MHz TX"
-        assert template.parameters["standard"] == "802.11ax"
-        assert template.parameters["bandwidth_mhz"] == 40
+        assert template.parameters["standard"] == "AX"
+        assert template.parameters["bandwidth"] == "BW40"
         assert template.parameters["frequency_hz"] == 5.19e9
 
     def test_wifi5_80mhz(self):
         template = WLANTxTemplate.wifi5_80mhz()
         assert template.name == "WLAN 802.11ac 80 MHz TX"
-        assert template.parameters["standard"] == "802.11ac"
-        assert template.parameters["bandwidth_mhz"] == 80
+        assert template.parameters["standard"] == "AC"
+        assert template.parameters["bandwidth"] == "BW80"
 
     def test_to_dict(self):
         template = WLANTxTemplate()
@@ -223,7 +223,7 @@ class TestWLANTxTemplate:
             template.save(filepath)
             loaded = MeasurementTemplate.load(filepath)
             assert isinstance(loaded, WLANTxTemplate)
-            assert loaded.parameters["bandwidth_mhz"] == 80
+            assert loaded.parameters["bandwidth"] == "BW80"
         finally:
             Path(filepath).unlink(missing_ok=True)
 

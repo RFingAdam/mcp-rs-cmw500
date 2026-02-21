@@ -98,7 +98,7 @@ class SCPISocket:
             try:
                 self._writer.close()
                 await self._writer.wait_closed()
-            except Exception as e:
+            except OSError as e:
                 logger.warning(f"Error closing connection: {e}")
             finally:
                 self._writer = None
@@ -130,7 +130,7 @@ class SCPISocket:
                 await self._writer.drain()
                 logger.debug(f"Sent: {command.strip()}")
 
-            except Exception as e:
+            except OSError as e:
                 self._connected = False
                 raise CommunicationError(f"Failed to send command: {e}", self.address)
 
@@ -164,7 +164,7 @@ class SCPISocket:
 
         except asyncio.TimeoutError:
             raise TimeoutError(f"Read timed out after {timeout}s", self.address)
-        except Exception as e:
+        except OSError as e:
             self._connected = False
             raise CommunicationError(f"Failed to read response: {e}", self.address)
 

@@ -1,5 +1,6 @@
 """CMW500 driver for Rohde & Schwarz CMW500 via TCP/IP SCPI."""
 
+import asyncio
 import logging
 from enum import Enum
 from typing import Any
@@ -19,7 +20,7 @@ from ..models.cmw_types import (
     SEMResult,
     SignalPath,
 )
-from ..safety.validators import SafetyLimits, SafetyValidator
+from ..safety.validators import SafetyLimits, SafetyValidator, sanitize_scpi_param
 from .scpi_socket import SCPISocket
 
 logger = logging.getLogger(__name__)
@@ -128,8 +129,9 @@ class CMW500Driver:
         try:
             await self._scpi.connect()
             self._state = ConnectionState.CONNECTED
-        except Exception:
+        except (OSError, asyncio.TimeoutError) as e:
             self._state = ConnectionState.ERROR
+            logger.error(f"Failed to connect to {self.host}:{self.port}: {e}")
             raise
 
     async def disconnect(self) -> None:
@@ -176,7 +178,7 @@ class CMW500Driver:
         errors = []
         for _ in range(20):  # Max 20 errors to prevent infinite loop
             response = await self._scpi.query("SYSTem:ERRor?")
-            if response.startswith("0,") or response.startswith("0,\"No error"):
+            if response.startswith("0,") or response.startswith('0,"No error'):
                 break
             errors.append(response)
         return errors
@@ -239,9 +241,7 @@ class CMW500Driver:
             SafetyError: If frequency exceeds limits
         """
         self._safety.validate_frequency(frequency_hz)
-        await self._scpi.send(
-            f"SOURce:GPRF:GENerator1:RFSettings:FREQuency {frequency_hz}"
-        )
+        await self._scpi.send(f"SOURce:GPRF:GENerator1:RFSettings:FREQuency {frequency_hz}")
 
     async def gen_set_level(self, level_dbm: float) -> None:
         """
@@ -254,9 +254,7 @@ class CMW500Driver:
             SafetyError: If level exceeds limits
         """
         self._safety.validate_generator_power(level_dbm)
-        await self._scpi.send(
-            f"SOURce:GPRF:GENerator1:RFSettings:LEVel {level_dbm}"
-        )
+        await self._scpi.send(f"SOURce:GPRF:GENerator1:RFSettings:LEVel {level_dbm}")
 
     async def gen_set_external_attenuation(self, attenuation_db: float) -> None:
         """
@@ -265,9 +263,7 @@ class CMW500Driver:
         Args:
             attenuation_db: External attenuation in dB
         """
-        await self._scpi.send(
-            f"SOURce:GPRF:GENerator1:RFSettings:EATTenuation {attenuation_db}"
-        )
+        await self._scpi.send(f"SOURce:GPRF:GENerator1:RFSettings:EATTenuation {attenuation_db}")
 
     async def gen_output_on(self) -> None:
         """Enable generator RF output."""
@@ -286,20 +282,17 @@ class CMW500Driver:
         Args:
             file_path: Path to ARB file on CMW500
         """
+        sanitize_scpi_param(file_path)
         await self._scpi.send(f"SOURce:GPRF:GENerator1:ARB:FILE '{file_path}'")
 
-    async def gen_configure_arb(
-        self, repetition: ARBRepetition = ARBRepetition.CONTINUOUS
-    ) -> None:
+    async def gen_configure_arb(self, repetition: ARBRepetition = ARBRepetition.CONTINUOUS) -> None:
         """
         Configure ARB waveform playback.
 
         Args:
             repetition: Waveform repetition mode
         """
-        await self._scpi.send(
-            f"SOURce:GPRF:GENerator1:ARB:REPetition {repetition.value}"
-        )
+        await self._scpi.send(f"SOURce:GPRF:GENerator1:ARB:REPetition {repetition.value}")
 
     # =========================================================================
     # GPRF Analyzer (RF signal analysis)
@@ -316,9 +309,7 @@ class CMW500Driver:
             SafetyError: If frequency exceeds limits
         """
         self._safety.validate_frequency(frequency_hz)
-        await self._scpi.send(
-            f"CONFigure:GPRF:MEASurement1:RFSettings:FREQuency {frequency_hz}"
-        )
+        await self._scpi.send(f"CONFigure:GPRF:MEASurement1:RFSettings:FREQuency {frequency_hz}")
 
     async def meas_set_expected_power(self, power_dbm: float) -> None:
         """
@@ -331,9 +322,7 @@ class CMW500Driver:
             SafetyError: If power exceeds limits
         """
         self._safety.validate_expected_power(power_dbm)
-        await self._scpi.send(
-            f"CONFigure:GPRF:MEASurement1:RFSettings:ENPower {power_dbm}"
-        )
+        await self._scpi.send(f"CONFigure:GPRF:MEASurement1:RFSettings:ENPower {power_dbm}")
 
     async def meas_set_external_attenuation(self, attenuation_db: float) -> None:
         """
@@ -360,20 +349,39 @@ class CMW500Driver:
             meas_length_s: Measurement length in seconds
             repetition: Measurement repetition mode
         """
-        await self._scpi.send(
-            f"CONFigure:GPRF:MEASurement1:POWer:SCOunt {statistic_count}"
-        )
-        await self._scpi.send(
-            f"CONFigure:GPRF:MEASurement1:POWer:MLENgth {meas_length_s}"
-        )
-        await self._scpi.send(
-            f"CONFigure:GPRF:MEASurement1:POWer:REPetition {repetition.value}"
-        )
+        await self._scpi.send(f"CONFigure:GPRF:MEASurement1:POWer:SCOunt {statistic_count}")
+        await self._scpi.send(f"CONFigure:GPRF:MEASurement1:POWer:MLENgth {meas_length_s}")
+        await self._scpi.send(f"CONFigure:GPRF:MEASurement1:POWer:REPetition {repetition.value}")
 
-    async def meas_configure_spectrum(self) -> dict[str, str]:
-        """Configure GPRF spectrum measurement (not yet fully implemented)."""
-        logger.warning("Spectrum measurement configuration is a placeholder")
-        return {"status": "placeholder", "note": "Spectrum config not yet implemented"}
+    async def meas_configure_spectrum(
+        self,
+        center_freq_hz: float | None = None,
+        span_hz: float = 100e6,
+        rbw_hz: float = 100e3,
+        detector: str = "RMS",
+    ) -> dict[str, str]:
+        """Configure GPRF spectrum measurement.
+
+        Args:
+            center_freq_hz: Center frequency in Hz (uses current if None)
+            span_hz: Frequency span in Hz (default 100 MHz)
+            rbw_hz: Resolution bandwidth in Hz (default 100 kHz)
+            detector: Detector type (RMS, PEAK, etc.)
+        """
+        if center_freq_hz is not None:
+            await self._scpi.send(
+                f"CONFigure:GPRF:MEASurement1:SPECtrum:FREQuency:CENTer {center_freq_hz}"
+            )
+        await self._scpi.send(f"CONFigure:GPRF:MEASurement1:SPECtrum:FREQuency:SPAN {span_hz}")
+        await self._scpi.send(f"CONFigure:GPRF:MEASurement1:SPECtrum:BWIDth {rbw_hz}")
+        sanitize_scpi_param(detector)
+        await self._scpi.send(f"CONFigure:GPRF:MEASurement1:SPECtrum:DETector {detector}")
+        return {
+            "status": "ok",
+            "span_hz": str(span_hz),
+            "rbw_hz": str(rbw_hz),
+            "detector": detector,
+        }
 
     async def meas_trigger_power(self) -> None:
         """Initiate GPRF power measurement."""
@@ -398,7 +406,7 @@ class CMW500Driver:
             if len(parts) >= 2:
                 result.reliability = parts[0].strip()
                 result.current_dbm = _parse_float(parts[1], "current_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch current power: {e}")
 
         try:
@@ -406,7 +414,7 @@ class CMW500Driver:
             parts = response.split(",")
             if len(parts) >= 2:
                 result.average_dbm = _parse_float(parts[1], "average_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch average power: {e}")
 
         try:
@@ -414,7 +422,7 @@ class CMW500Driver:
             parts = response.split(",")
             if len(parts) >= 2:
                 result.maximum_dbm = _parse_float(parts[1], "maximum_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch maximum power: {e}")
 
         try:
@@ -422,7 +430,7 @@ class CMW500Driver:
             parts = response.split(",")
             if len(parts) >= 2:
                 result.minimum_dbm = _parse_float(parts[1], "minimum_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch minimum power: {e}")
 
         return result
@@ -448,9 +456,7 @@ class CMW500Driver:
         Args:
             scenario: Signal path scenario
         """
-        await self._scpi.send(
-            f"ROUTe:GPRF:MEASurement1:SCENario {scenario.value}"
-        )
+        await self._scpi.send(f"ROUTe:GPRF:MEASurement1:SCENario {scenario.value}")
 
     async def get_signal_path(self) -> str:
         """
@@ -477,12 +483,8 @@ class CMW500Driver:
         bw = LTEBandwidth.from_mhz(config.bandwidth_mhz)
         await self._scpi.send(f"CONFigure:LTE:SIGN1:CELL:BANDwidth {bw.value}")
         await self._scpi.send(f"CONFigure:LTE:SIGN1:CELL:BAND {config.band}")
-        await self._scpi.send(
-            f"CONFigure:LTE:SIGN1:RFSettings:CHANnel:DL {config.dl_earfcn}"
-        )
-        await self._scpi.send(
-            f"CONFigure:LTE:SIGN1:RFSettings:DL:LEVel {config.dl_level_dbm}"
-        )
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:RFSettings:CHANnel:DL {config.dl_earfcn}")
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:RFSettings:DL:LEVel {config.dl_level_dbm}")
 
     async def lte_cell_on(self) -> None:
         """Turn on LTE cell (start base station emulation)."""
@@ -522,12 +524,26 @@ class CMW500Driver:
             mcc: Mobile Country Code
             mnc: Mobile Network Code
         """
+        sanitize_scpi_param(mcc)
+        sanitize_scpi_param(mnc)
         await self._scpi.send(f"CONFigure:LTE:SIGN1:NAS:MCC {mcc}")
         await self._scpi.send(f"CONFigure:LTE:SIGN1:NAS:MNC {mnc}")
 
-    async def lte_configure_bearer(self) -> None:
-        """Configure default EPS bearer (placeholder for expansion)."""
-        logger.info("Bearer configuration using defaults")
+    async def lte_configure_bearer(
+        self,
+        apn: str = "default",
+        ip_version: str = "IPV4",
+    ) -> None:
+        """Configure default EPS bearer.
+
+        Args:
+            apn: Access Point Name
+            ip_version: IP version (IPV4, IPV6, IPV4V6)
+        """
+        sanitize_scpi_param(apn)
+        sanitize_scpi_param(ip_version)
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:CONNection:APName '{apn}'")
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:CONNection:IPVersion {ip_version}")
 
     async def lte_configure_cdrx(self, enabled: bool = False) -> None:
         """
@@ -557,10 +573,25 @@ class CMW500Driver:
     # LTE Measurement
     # =========================================================================
 
-    async def lte_meas_configure(self) -> dict[str, str]:
-        """Configure LTE multi-evaluation measurement (not yet fully implemented)."""
-        logger.warning("LTE multi-evaluation measurement configuration is a placeholder")
-        return {"status": "placeholder", "note": "LTE measurement config not yet implemented"}
+    async def lte_meas_configure(
+        self,
+        stat_count: int = 10,
+        repetition: str = "SINGleshot",
+    ) -> dict[str, str]:
+        """Configure LTE multi-evaluation measurement.
+
+        Args:
+            stat_count: Number of subframes to measure (default 10)
+            repetition: Measurement repetition mode (SINGleshot, CONTinuous)
+        """
+        await self._scpi.send(f"CONFigure:LTE:MEAS1:MEValuation:SCOunt {stat_count}")
+        sanitize_scpi_param(repetition)
+        await self._scpi.send(f"CONFigure:LTE:MEAS1:MEValuation:REPetition {repetition}")
+        return {
+            "status": "ok",
+            "stat_count": str(stat_count),
+            "repetition": repetition,
+        }
 
     async def lte_meas_trigger(self) -> None:
         """Trigger LTE multi-evaluation measurement."""
@@ -575,16 +606,14 @@ class CMW500Driver:
         """
         result = PowerResult()
         try:
-            response = await self._scpi.query(
-                "FETCh:LTE:MEAS1:MEValuation:POWer:CURRent?"
-            )
+            response = await self._scpi.query("FETCh:LTE:MEAS1:MEValuation:POWer:CURRent?")
             parts = response.split(",")
             if len(parts) >= 2:
                 result.reliability = parts[0].strip()
                 result.current_dbm = _parse_float(parts[1], "lte_power")
             if len(parts) >= 3:
                 result.average_dbm = _parse_float(parts[2], "lte_avg_power")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch LTE power: {e}")
         return result
 
@@ -597,16 +626,14 @@ class CMW500Driver:
         """
         result = EVMResult()
         try:
-            response = await self._scpi.query(
-                "FETCh:LTE:MEAS1:MEValuation:MODulation:CURRent?"
-            )
+            response = await self._scpi.query("FETCh:LTE:MEAS1:MEValuation:MODulation:CURRent?")
             parts = response.split(",")
             if len(parts) >= 2:
                 result.reliability = parts[0].strip()
                 result.evm_rms_percent = _parse_float(parts[1], "evm_rms")
             if len(parts) >= 3:
                 result.evm_peak_percent = _parse_float(parts[2], "evm_peak")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch LTE EVM: {e}")
         return result
 
@@ -619,9 +646,7 @@ class CMW500Driver:
         """
         result = ACLRResult()
         try:
-            response = await self._scpi.query(
-                "FETCh:LTE:MEAS1:MEValuation:ACLR:CURRent?"
-            )
+            response = await self._scpi.query("FETCh:LTE:MEAS1:MEValuation:ACLR:CURRent?")
             parts = response.split(",")
             if len(parts) >= 2:
                 result.reliability = parts[0].strip()
@@ -631,7 +656,7 @@ class CMW500Driver:
             if len(parts) >= 5:
                 result.aclr_minus2_db = _parse_float(parts[3], "aclr_minus2")
                 result.aclr_plus2_db = _parse_float(parts[4], "aclr_plus2")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch LTE ACLR: {e}")
         return result
 
@@ -644,9 +669,7 @@ class CMW500Driver:
         """
         result = SEMResult()
         try:
-            response = await self._scpi.query(
-                "FETCh:LTE:MEAS1:MEValuation:SEMask:CURRent?"
-            )
+            response = await self._scpi.query("FETCh:LTE:MEAS1:MEValuation:SEMask:CURRent?")
             parts = response.split(",")
             if len(parts) >= 2:
                 result.reliability = parts[0].strip()
@@ -654,7 +677,7 @@ class CMW500Driver:
                 result.passed = parts[1].strip() in ("0", "PASS")
             if len(parts) >= 3:
                 result.margin_db = _parse_float(parts[2], "sem_margin")
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch LTE SEM: {e}")
         return result
 
@@ -666,15 +689,13 @@ class CMW500Driver:
             Dictionary with frequency error data
         """
         try:
-            response = await self._scpi.query(
-                "FETCh:LTE:MEAS1:MEValuation:FERRor:CURRent?"
-            )
+            response = await self._scpi.query("FETCh:LTE:MEAS1:MEValuation:FERRor:CURRent?")
             parts = response.split(",")
             result: dict[str, Any] = {"reliability": parts[0].strip() if parts else ""}
             if len(parts) >= 2:
                 result["frequency_error_hz"] = _parse_float(parts[1], "freq_error")
             return result
-        except Exception as e:
+        except (OSError, MeasurementError, ValueError) as e:
             logger.warning(f"Failed to fetch frequency error: {e}")
             return {"error": str(e)}
 
@@ -698,6 +719,476 @@ class CMW500Driver:
         }
 
     # =========================================================================
+    # WLAN Non-Signaling
+    # =========================================================================
+
+    async def wlan_set_route(self, scenario: str = "SALone", meas_instance: int = 1) -> None:
+        """Set WLAN measurement signal path scenario.
+
+        Args:
+            scenario: Signal path scenario string
+            meas_instance: Measurement instance number (1-based)
+        """
+        await self._scpi.send(f"ROUTe:WLAN:MEAS{meas_instance}:SCENario {scenario}")
+
+    async def wlan_set_standard(self, standard: str, meas_instance: int = 1) -> None:
+        """Set WLAN standard.
+
+        Args:
+            standard: WLAN standard (A, B, G, N, AC, AX)
+            meas_instance: Measurement instance number
+        """
+        await self._scpi.send(f"CONFigure:WLAN:MEAS{meas_instance}:MEValuation:STANdard {standard}")
+
+    async def wlan_set_bandwidth(self, bandwidth: str, meas_instance: int = 1) -> None:
+        """Set WLAN channel bandwidth.
+
+        Args:
+            bandwidth: Bandwidth string (BW20, BW40, BW80, BW160)
+            meas_instance: Measurement instance number
+        """
+        await self._scpi.send(f"CONFigure:WLAN:MEAS{meas_instance}:MEValuation:BWIDth {bandwidth}")
+
+    async def wlan_set_frequency(self, frequency_hz: float, meas_instance: int = 1) -> None:
+        """Set WLAN measurement frequency.
+
+        Args:
+            frequency_hz: Frequency in Hz
+            meas_instance: Measurement instance number
+        """
+        self._safety.validate_frequency(frequency_hz)
+        await self._scpi.send(
+            f"CONFigure:WLAN:MEAS{meas_instance}:RFSettings:FREQuency {frequency_hz}"
+        )
+
+    async def wlan_set_expected_power(self, power_dbm: float, meas_instance: int = 1) -> None:
+        """Set WLAN expected input power.
+
+        Args:
+            power_dbm: Expected power in dBm
+            meas_instance: Measurement instance number
+        """
+        self._safety.validate_expected_power(power_dbm)
+        await self._scpi.send(f"CONFigure:WLAN:MEAS{meas_instance}:RFSettings:ENPower {power_dbm}")
+
+    async def wlan_configure(self, config: Any) -> None:
+        """Configure WLAN measurement from WLANMeasConfig.
+
+        Args:
+            config: WLANMeasConfig instance
+        """
+        n = config.meas_instance
+        await self.wlan_set_route("SALone", n)
+        await self.wlan_set_standard(config.standard.value, n)
+        await self.wlan_set_bandwidth(config.bandwidth.value, n)
+        await self.wlan_set_frequency(config.frequency_hz, n)
+        await self.wlan_set_expected_power(config.expected_power_dbm, n)
+
+    async def wlan_trigger(self, meas_instance: int = 1) -> None:
+        """Trigger WLAN multi-evaluation measurement.
+
+        Args:
+            meas_instance: Measurement instance number
+        """
+        await self._scpi.send(f"INITiate:WLAN:MEAS{meas_instance}:MEValuation")
+
+    async def wlan_fetch_power(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch WLAN power measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with power measurement data
+        """
+        from ..models.cmw_types import WLANPowerResult
+
+        result = WLANPowerResult()
+        try:
+            response = await self._scpi.query(
+                f"FETCh:WLAN:MEAS{meas_instance}:MEValuation:POWer:CURRent?"
+            )
+            parts = response.split(",")
+            if len(parts) >= 2:
+                result.reliability = parts[0].strip()
+                result.power_dbm = _parse_float(parts[1], "wlan_power")
+            if len(parts) >= 3:
+                result.peak_power_dbm = _parse_float(parts[2], "wlan_peak_power")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch WLAN power: {e}")
+        return result.to_dict()
+
+    async def wlan_fetch_evm(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch WLAN EVM measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with EVM measurement data
+        """
+        from ..models.cmw_types import WLANEVMResult
+
+        result = WLANEVMResult()
+        try:
+            response = await self._scpi.query(
+                f"FETCh:WLAN:MEAS{meas_instance}:MEValuation:MODulation:CURRent?"
+            )
+            parts = response.split(",")
+            if len(parts) >= 2:
+                result.reliability = parts[0].strip()
+                result.evm_all_carriers_db = _parse_float(parts[1], "wlan_evm_all")
+            if len(parts) >= 3:
+                result.evm_data_carriers_db = _parse_float(parts[2], "wlan_evm_data")
+            if len(parts) >= 4:
+                result.evm_pilot_carriers_db = _parse_float(parts[3], "wlan_evm_pilot")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch WLAN EVM: {e}")
+        return result.to_dict()
+
+    async def wlan_fetch_spectrum_flatness(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch WLAN spectrum flatness measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with spectrum flatness data
+        """
+        from ..models.cmw_types import WLANSpectrumFlatnessResult
+
+        result = WLANSpectrumFlatnessResult()
+        try:
+            response = await self._scpi.query(
+                f"FETCh:WLAN:MEAS{meas_instance}:MEValuation:SFLatness:CURRent?"
+            )
+            parts = response.split(",")
+            if len(parts) >= 2:
+                result.reliability = parts[0].strip()
+                result.passed = parts[1].strip() in ("0", "PASS")
+            if len(parts) >= 3:
+                result.margin_db = _parse_float(parts[2], "wlan_sf_margin")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch WLAN spectrum flatness: {e}")
+        return result.to_dict()
+
+    async def wlan_fetch_frequency_error(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch WLAN frequency error measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with frequency error data
+        """
+        try:
+            response = await self._scpi.query(
+                f"FETCh:WLAN:MEAS{meas_instance}:MEValuation:FERRor:CURRent?"
+            )
+            parts = response.split(",")
+            result: dict[str, Any] = {"reliability": parts[0].strip() if parts else ""}
+            if len(parts) >= 2:
+                result["frequency_error_hz"] = _parse_float(parts[1], "wlan_freq_error")
+            return result
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch WLAN frequency error: {e}")
+            return {"error": str(e)}
+
+    async def wlan_fetch_all(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch all WLAN measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with all WLAN measurement results
+        """
+        power = await self.wlan_fetch_power(meas_instance)
+        evm = await self.wlan_fetch_evm(meas_instance)
+        spectrum_flatness = await self.wlan_fetch_spectrum_flatness(meas_instance)
+        frequency_error = await self.wlan_fetch_frequency_error(meas_instance)
+
+        return {
+            "power": power,
+            "evm": evm,
+            "spectrum_flatness": spectrum_flatness,
+            "frequency_error": frequency_error,
+        }
+
+    # =========================================================================
+    # Bluetooth / BLE Non-Signaling
+    # =========================================================================
+
+    async def bt_set_route(self, scenario: str = "SALone", meas_instance: int = 1) -> None:
+        """Set Bluetooth measurement signal path scenario.
+
+        Args:
+            scenario: Signal path scenario string
+            meas_instance: Measurement instance number
+        """
+        await self._scpi.send(f"ROUTe:BLUetooth:MEAS{meas_instance}:SCENario {scenario}")
+
+    async def bt_set_technology(self, technology: str, meas_instance: int = 1) -> None:
+        """Set Bluetooth technology (Classic or LE).
+
+        Args:
+            technology: Technology string (CLASsic or LENergy)
+            meas_instance: Measurement instance number
+        """
+        await self._scpi.send(
+            f"CONFigure:BLUetooth:MEAS{meas_instance}:MEValuation:TECHnology {technology}"
+        )
+
+    async def bt_set_ble_mode(self, mode: str, meas_instance: int = 1) -> None:
+        """Set BLE PHY mode.
+
+        Args:
+            mode: BLE PHY mode (LE1M, LE2M, LECS2, LECS8)
+            meas_instance: Measurement instance number
+        """
+        await self._scpi.send(
+            f"CONFigure:BLUetooth:MEAS{meas_instance}:MEValuation:BURSt:TYPE {mode}"
+        )
+
+    async def bt_set_packet_type(self, packet_type: str, meas_instance: int = 1) -> None:
+        """Set Bluetooth Classic packet type.
+
+        Args:
+            packet_type: Packet type string (DH1, DH3, etc.)
+            meas_instance: Measurement instance number
+        """
+        await self._scpi.send(
+            f"CONFigure:BLUetooth:MEAS{meas_instance}:MEValuation:PACKet:TYPE {packet_type}"
+        )
+
+    async def bt_set_frequency(self, frequency_hz: float, meas_instance: int = 1) -> None:
+        """Set Bluetooth measurement frequency.
+
+        Args:
+            frequency_hz: Frequency in Hz
+            meas_instance: Measurement instance number
+        """
+        self._safety.validate_frequency(frequency_hz)
+        await self._scpi.send(
+            f"CONFigure:BLUetooth:MEAS{meas_instance}:RFSettings:FREQuency {frequency_hz}"
+        )
+
+    async def bt_set_expected_power(self, power_dbm: float, meas_instance: int = 1) -> None:
+        """Set Bluetooth expected input power.
+
+        Args:
+            power_dbm: Expected power in dBm
+            meas_instance: Measurement instance number
+        """
+        self._safety.validate_expected_power(power_dbm)
+        await self._scpi.send(
+            f"CONFigure:BLUetooth:MEAS{meas_instance}:RFSettings:ENPower {power_dbm}"
+        )
+
+    async def bt_configure(self, config: Any) -> None:
+        """Configure Bluetooth measurement from BTMeasConfig.
+
+        Args:
+            config: BTMeasConfig instance
+        """
+        n = config.meas_instance
+        await self.bt_set_route("SALone", n)
+        await self.bt_set_technology(config.technology.value, n)
+        if config.technology.value == "LENergy":
+            await self.bt_set_ble_mode(config.ble_mode.value, n)
+        else:
+            await self.bt_set_packet_type(config.packet_type.value, n)
+        await self.bt_set_frequency(config.frequency_hz, n)
+        await self.bt_set_expected_power(config.expected_power_dbm, n)
+
+    async def bt_trigger(self, meas_instance: int = 1) -> None:
+        """Trigger Bluetooth multi-evaluation measurement.
+
+        Args:
+            meas_instance: Measurement instance number
+        """
+        await self._scpi.send(f"INITiate:BLUetooth:MEAS{meas_instance}:MEValuation")
+
+    async def bt_fetch_power(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch Bluetooth power measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with power measurement data
+        """
+        from ..models.cmw_types import BTPowerResult
+
+        result = BTPowerResult()
+        try:
+            response = await self._scpi.query(
+                f"FETCh:BLUetooth:MEAS{meas_instance}:MEValuation:POWer:CURRent?"
+            )
+            parts = response.split(",")
+            if len(parts) >= 2:
+                result.reliability = parts[0].strip()
+                result.power_dbm = _parse_float(parts[1], "bt_power")
+            if len(parts) >= 3:
+                result.peak_power_dbm = _parse_float(parts[2], "bt_peak_power")
+            if len(parts) >= 4:
+                result.power_density_dbm_hz = _parse_float(parts[3], "bt_power_density")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch BT power: {e}")
+        return result.to_dict()
+
+    async def bt_fetch_modulation(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch Bluetooth modulation (DEVM) measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with modulation measurement data
+        """
+        from ..models.cmw_types import BTModulationResult
+
+        result = BTModulationResult()
+        try:
+            response = await self._scpi.query(
+                f"FETCh:BLUetooth:MEAS{meas_instance}:MEValuation:MODulation:CURRent?"
+            )
+            parts = response.split(",")
+            if len(parts) >= 2:
+                result.reliability = parts[0].strip()
+                result.devm_rms_percent = _parse_float(parts[1], "bt_devm_rms")
+            if len(parts) >= 3:
+                result.devm_peak_percent = _parse_float(parts[2], "bt_devm_peak")
+            if len(parts) >= 4:
+                result.devm_99_percent = _parse_float(parts[3], "bt_devm_99")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch BT modulation: {e}")
+        return result.to_dict()
+
+    async def bt_fetch_frequency(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch Bluetooth frequency measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with frequency measurement data
+        """
+        from ..models.cmw_types import BTFrequencyResult
+
+        result = BTFrequencyResult()
+        try:
+            response = await self._scpi.query(
+                f"FETCh:BLUetooth:MEAS{meas_instance}:MEValuation:FREQuency:CURRent?"
+            )
+            parts = response.split(",")
+            if len(parts) >= 2:
+                result.reliability = parts[0].strip()
+                result.initial_offset_khz = _parse_float(parts[1], "bt_freq_offset")
+            if len(parts) >= 3:
+                result.carrier_drift_khz = _parse_float(parts[2], "bt_carrier_drift")
+            if len(parts) >= 4:
+                result.carrier_drift_rate_khz_us = _parse_float(parts[3], "bt_drift_rate")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch BT frequency: {e}")
+        return result.to_dict()
+
+    async def bt_fetch_all(self, meas_instance: int = 1) -> dict[str, Any]:
+        """Fetch all Bluetooth measurement results.
+
+        Args:
+            meas_instance: Measurement instance number
+
+        Returns:
+            Dictionary with all Bluetooth measurement results
+        """
+        power = await self.bt_fetch_power(meas_instance)
+        modulation = await self.bt_fetch_modulation(meas_instance)
+        frequency = await self.bt_fetch_frequency(meas_instance)
+
+        return {
+            "power": power,
+            "modulation": modulation,
+            "frequency": frequency,
+        }
+
+    # =========================================================================
+    # Enhanced GPRF
+    # =========================================================================
+
+    async def meas_set_trigger_source(self, source: str = "IF Power") -> None:
+        """Set GPRF measurement trigger source.
+
+        Args:
+            source: Trigger source string
+        """
+        sanitize_scpi_param(source)
+        await self._scpi.send(f"TRIGger:GPRF:MEAS1:POWer:SOURce '{source}'")
+
+    async def meas_set_trigger_threshold(self, threshold_dbm: float) -> None:
+        """Set GPRF measurement trigger threshold.
+
+        Args:
+            threshold_dbm: Trigger threshold in dBm
+        """
+        await self._scpi.send(f"TRIGger:GPRF:MEAS1:POWer:THReshold {threshold_dbm}")
+
+    async def meas_set_power_filter(
+        self, filter_type: str = "NONE", bandwidth_hz: float | None = None
+    ) -> None:
+        """Set GPRF power measurement filter.
+
+        Args:
+            filter_type: Filter type (NONE, GAUSs, etc.)
+            bandwidth_hz: Filter bandwidth in Hz (if applicable)
+        """
+        sanitize_scpi_param(filter_type)
+        await self._scpi.send(f"CONFigure:GPRF:MEAS1:POWer:FILTer:TYPE {filter_type}")
+        if bandwidth_hz is not None:
+            await self._scpi.send(f"CONFigure:GPRF:MEAS1:POWer:FILTer:BWIDth {bandwidth_hz}")
+
+    async def gen_set_baseband_mode(self, mode: str = "CW") -> None:
+        """Set generator baseband mode.
+
+        Args:
+            mode: Baseband mode (CW, ARB, etc.)
+        """
+        sanitize_scpi_param(mode)
+        await self._scpi.send(f"SOURce:GPRF:GENerator1:BBMode {mode}")
+
+    async def meas_set_user_margin(self, margin_db: float) -> None:
+        """Set GPRF analyzer user margin.
+
+        Args:
+            margin_db: User margin in dB
+        """
+        await self._scpi.send(f"CONFigure:GPRF:MEAS1:RFSettings:UMARgin {margin_db}")
+
+    async def gen_set_port(self, connector: str) -> None:
+        """Set generator RF output port/connector.
+
+        Args:
+            connector: Connector/port string
+        """
+        sanitize_scpi_param(connector)
+        await self._scpi.send(f"ROUTe:GPRF:GENerator1:SCENario:SPATh {connector}")
+
+    async def meas_set_port(self, connector: str) -> None:
+        """Set analyzer RF input port/connector.
+
+        Args:
+            connector: Connector/port string
+        """
+        sanitize_scpi_param(connector)
+        await self._scpi.send(f"ROUTe:GPRF:MEAS1:SCENario:SPATh {connector}")
+
+    async def system_all_off(self) -> None:
+        """Turn off all generators and measurements (safe state)."""
+        await self._scpi.send("SYSTem:GENerator:ALL:OFF")
+        await self._scpi.send("SYSTem:MEASurement:ALL:OFF")
+        self._generator_on = False
+
+    # =========================================================================
     # Context Manager
     # =========================================================================
 
@@ -712,6 +1203,6 @@ class CMW500Driver:
         if self._generator_on:
             try:
                 await self.gen_output_off()
-            except Exception:
-                pass
+            except OSError as e:
+                logger.warning(f"Failed to turn off generator during cleanup: {e}")
         await self.disconnect()

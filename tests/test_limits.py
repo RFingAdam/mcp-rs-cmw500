@@ -30,9 +30,7 @@ class TestLimitSegment:
         assert failure.limit_type == "min"
 
     def test_both_limits(self):
-        seg = LimitSegment(
-            parameter="evm_percent", max_value=8.0, min_value=0.0, unit="%"
-        )
+        seg = LimitSegment(parameter="evm_percent", max_value=8.0, min_value=0.0, unit="%")
         assert seg.check_value(5.0) is None  # Pass
         assert seg.check_value(10.0) is not None  # Fail max
         assert seg.check_value(-1.0) is not None  # Fail min
@@ -48,11 +46,13 @@ class TestLimitSegment:
         assert d["max_value"] == 23.0
 
     def test_from_dict(self):
-        seg = LimitSegment.from_dict({
-            "parameter": "evm",
-            "max_value": 8.0,
-            "unit": "%",
-        })
+        seg = LimitSegment.from_dict(
+            {
+                "parameter": "evm",
+                "max_value": 8.0,
+                "unit": "%",
+            }
+        )
         assert seg.parameter == "evm"
         assert seg.max_value == 8.0
 

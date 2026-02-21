@@ -94,6 +94,22 @@ class MeasurementTemplate:
             from .wlan_tx import WLANTxTemplate
 
             return WLANTxTemplate.from_dict(data)
+        elif template_type == "WLANRxTemplate":
+            from .wlan_rx import WLANRxTemplate
+
+            return WLANRxTemplate.from_dict(data)
+        elif template_type == "BLETxTemplate":
+            from .ble_tx import BLETxTemplate
+
+            return BLETxTemplate.from_dict(data)
+        elif template_type == "BLERxTemplate":
+            from .ble_rx import BLERxTemplate
+
+            return BLERxTemplate.from_dict(data)
+        elif template_type == "BTClassicTxTemplate":
+            from .bt_classic_tx import BTClassicTxTemplate
+
+            return BTClassicTxTemplate.from_dict(data)
         else:
             return cls.from_dict(data)
 

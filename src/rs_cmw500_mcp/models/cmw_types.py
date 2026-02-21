@@ -390,3 +390,269 @@ class ConnectionState:
             "connection_state": self.connection_state,
             "registered": self.registered,
         }
+
+
+# =============================================================================
+# WLAN Types
+# =============================================================================
+
+
+class WLANStandard(Enum):
+    """IEEE 802.11 standard variants."""
+
+    A = "A"
+    B = "B"
+    G = "G"
+    N = "N"
+    AC = "AC"
+    AX = "AX"
+
+
+class WLANBandwidth(Enum):
+    """WLAN channel bandwidths."""
+
+    BW20 = "BW20"
+    BW40 = "BW40"
+    BW80 = "BW80"
+    BW160 = "BW160"
+
+    @property
+    def mhz(self) -> float:
+        """Bandwidth in MHz."""
+        bw_map = {"BW20": 20.0, "BW40": 40.0, "BW80": 80.0, "BW160": 160.0}
+        return bw_map[self.value]
+
+    @classmethod
+    def from_mhz(cls, mhz: float) -> "WLANBandwidth":
+        """Create from MHz value."""
+        mhz_map = {20.0: cls.BW20, 40.0: cls.BW40, 80.0: cls.BW80, 160.0: cls.BW160}
+        if mhz not in mhz_map:
+            raise ValueError(f"Invalid WLAN bandwidth: {mhz} MHz. Must be one of {list(mhz_map)}")
+        return mhz_map[mhz]
+
+
+# =============================================================================
+# Bluetooth Types
+# =============================================================================
+
+
+class BTTechnology(Enum):
+    """Bluetooth technology variants."""
+
+    CLASSIC = "CLASsic"
+    LE = "LENergy"
+
+
+class BLEMode(Enum):
+    """BLE PHY modes."""
+
+    LE_1M = "LE1M"
+    LE_2M = "LE2M"
+    LE_CODED_S2 = "LECS2"
+    LE_CODED_S8 = "LECS8"
+
+
+class BTPacketType(Enum):
+    """Bluetooth Classic packet types."""
+
+    DH1 = "DH1"
+    DH3 = "DH3"
+    DH5 = "DH5"
+    DM1 = "DM1"
+    DM3 = "DM3"
+    DM5 = "DM5"
+    EDR_2DH1 = "2DH1"
+    EDR_2DH3 = "2DH3"
+    EDR_2DH5 = "2DH5"
+    EDR_3DH1 = "3DH1"
+    EDR_3DH3 = "3DH3"
+    EDR_3DH5 = "3DH5"
+
+
+# =============================================================================
+# WLAN Result Dataclasses
+# =============================================================================
+
+
+@dataclass
+class WLANEVMResult:
+    """WLAN EVM measurement result."""
+
+    evm_all_carriers_db: float | None = None
+    evm_data_carriers_db: float | None = None
+    evm_pilot_carriers_db: float | None = None
+    reliability: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {}
+        if self.evm_all_carriers_db is not None:
+            result["evm_all_carriers_db"] = self.evm_all_carriers_db
+        if self.evm_data_carriers_db is not None:
+            result["evm_data_carriers_db"] = self.evm_data_carriers_db
+        if self.evm_pilot_carriers_db is not None:
+            result["evm_pilot_carriers_db"] = self.evm_pilot_carriers_db
+        if self.reliability:
+            result["reliability"] = self.reliability
+        return result
+
+
+@dataclass
+class WLANPowerResult:
+    """WLAN power measurement result."""
+
+    power_dbm: float | None = None
+    peak_power_dbm: float | None = None
+    reliability: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {}
+        if self.power_dbm is not None:
+            result["power_dbm"] = self.power_dbm
+        if self.peak_power_dbm is not None:
+            result["peak_power_dbm"] = self.peak_power_dbm
+        if self.reliability:
+            result["reliability"] = self.reliability
+        return result
+
+
+@dataclass
+class WLANSpectrumFlatnessResult:
+    """WLAN spectrum flatness measurement result."""
+
+    passed: bool = False
+    margin_db: float | None = None
+    reliability: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {"passed": self.passed}
+        if self.margin_db is not None:
+            result["margin_db"] = self.margin_db
+        if self.reliability:
+            result["reliability"] = self.reliability
+        return result
+
+
+# =============================================================================
+# Bluetooth Result Dataclasses
+# =============================================================================
+
+
+@dataclass
+class BTModulationResult:
+    """Bluetooth modulation (DEVM) measurement result."""
+
+    devm_rms_percent: float | None = None
+    devm_peak_percent: float | None = None
+    devm_99_percent: float | None = None
+    reliability: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {}
+        if self.devm_rms_percent is not None:
+            result["devm_rms_percent"] = self.devm_rms_percent
+        if self.devm_peak_percent is not None:
+            result["devm_peak_percent"] = self.devm_peak_percent
+        if self.devm_99_percent is not None:
+            result["devm_99_percent"] = self.devm_99_percent
+        if self.reliability:
+            result["reliability"] = self.reliability
+        return result
+
+
+@dataclass
+class BTPowerResult:
+    """Bluetooth power measurement result."""
+
+    power_dbm: float | None = None
+    peak_power_dbm: float | None = None
+    power_density_dbm_hz: float | None = None
+    reliability: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {}
+        if self.power_dbm is not None:
+            result["power_dbm"] = self.power_dbm
+        if self.peak_power_dbm is not None:
+            result["peak_power_dbm"] = self.peak_power_dbm
+        if self.power_density_dbm_hz is not None:
+            result["power_density_dbm_hz"] = self.power_density_dbm_hz
+        if self.reliability:
+            result["reliability"] = self.reliability
+        return result
+
+
+@dataclass
+class BTFrequencyResult:
+    """Bluetooth frequency measurement result."""
+
+    initial_offset_khz: float | None = None
+    carrier_drift_khz: float | None = None
+    carrier_drift_rate_khz_us: float | None = None
+    reliability: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {}
+        if self.initial_offset_khz is not None:
+            result["initial_offset_khz"] = self.initial_offset_khz
+        if self.carrier_drift_khz is not None:
+            result["carrier_drift_khz"] = self.carrier_drift_khz
+        if self.carrier_drift_rate_khz_us is not None:
+            result["carrier_drift_rate_khz_us"] = self.carrier_drift_rate_khz_us
+        if self.reliability:
+            result["reliability"] = self.reliability
+        return result
+
+
+# =============================================================================
+# WLAN / Bluetooth Config Dataclasses
+# =============================================================================
+
+
+@dataclass
+class WLANMeasConfig:
+    """WLAN measurement configuration."""
+
+    standard: WLANStandard = WLANStandard.AX
+    bandwidth: WLANBandwidth = WLANBandwidth.BW80
+    frequency_hz: float = 5.18e9
+    expected_power_dbm: float = 20.0
+    meas_instance: int = 1
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "standard": self.standard.value,
+            "bandwidth": self.bandwidth.value,
+            "frequency_hz": self.frequency_hz,
+            "expected_power_dbm": self.expected_power_dbm,
+            "meas_instance": self.meas_instance,
+        }
+
+
+@dataclass
+class BTMeasConfig:
+    """Bluetooth measurement configuration."""
+
+    technology: BTTechnology = BTTechnology.LE
+    ble_mode: BLEMode = BLEMode.LE_1M
+    packet_type: BTPacketType = BTPacketType.DH1
+    frequency_hz: float = 2.402e9
+    expected_power_dbm: float = 10.0
+    meas_instance: int = 1
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "technology": self.technology.value,
+            "ble_mode": self.ble_mode.value,
+            "packet_type": self.packet_type.value,
+            "frequency_hz": self.frequency_hz,
+            "expected_power_dbm": self.expected_power_dbm,
+            "meas_instance": self.meas_instance,
+        }

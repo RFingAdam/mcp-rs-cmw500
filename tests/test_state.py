@@ -28,11 +28,13 @@ class TestGeneratorState:
         assert d["output_on"] is True
 
     def test_from_dict(self):
-        state = GeneratorState.from_dict({
-            "frequency_hz": 2.4e9,
-            "level_dbm": -20.0,
-            "output_on": True,
-        })
+        state = GeneratorState.from_dict(
+            {
+                "frequency_hz": 2.4e9,
+                "level_dbm": -20.0,
+                "output_on": True,
+            }
+        )
         assert state.frequency_hz == 2.4e9
         assert state.output_on is True
 

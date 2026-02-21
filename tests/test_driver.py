@@ -56,9 +56,7 @@ class TestCMW500DriverSystem:
     @pytest.mark.asyncio
     async def test_identify(self, driver):
         """Test identify command."""
-        driver._scpi.query = AsyncMock(
-            return_value="Rohde&Schwarz,CMW500,1234567,V3.8.10"
-        )
+        driver._scpi.query = AsyncMock(return_value="Rohde&Schwarz,CMW500,1234567,V3.8.10")
         info = await driver.identify()
         assert info.manufacturer == "Rohde&Schwarz"
         assert info.model == "CMW500"
@@ -90,9 +88,7 @@ class TestCMW500DriverSystem:
     @pytest.mark.asyncio
     async def test_get_errors_with_errors(self, driver):
         """Test get_errors with queued errors."""
-        driver._scpi.query = AsyncMock(
-            side_effect=['-100,"Command error"', '0,"No error"']
-        )
+        driver._scpi.query = AsyncMock(side_effect=['-100,"Command error"', '0,"No error"'])
         errors = await driver.get_errors()
         assert len(errors) == 1
         assert "Command error" in errors[0]
@@ -143,9 +139,7 @@ class TestCMW500DriverGenerator:
     async def test_gen_set_level(self, driver):
         """Test setting generator level."""
         await driver.gen_set_level(-30.0)
-        driver._scpi.send.assert_called_with(
-            "SOURce:GPRF:GENerator1:RFSettings:LEVel -30.0"
-        )
+        driver._scpi.send.assert_called_with("SOURce:GPRF:GENerator1:RFSettings:LEVel -30.0")
 
     @pytest.mark.asyncio
     async def test_gen_set_level_safety(self, driver):
@@ -180,9 +174,7 @@ class TestCMW500DriverGenerator:
     async def test_gen_configure_arb(self, driver):
         """Test configuring ARB playback."""
         await driver.gen_configure_arb(ARBRepetition.CONTINUOUS)
-        driver._scpi.send.assert_called_with(
-            "SOURce:GPRF:GENerator1:ARB:REPetition CONTinuous"
-        )
+        driver._scpi.send.assert_called_with("SOURce:GPRF:GENerator1:ARB:REPetition CONTinuous")
 
 
 class TestCMW500DriverAnalyzer:
@@ -207,9 +199,7 @@ class TestCMW500DriverAnalyzer:
     async def test_meas_set_expected_power(self, driver):
         """Test setting expected power."""
         await driver.meas_set_expected_power(10.0)
-        driver._scpi.send.assert_called_with(
-            "CONFigure:GPRF:MEASurement1:RFSettings:ENPower 10.0"
-        )
+        driver._scpi.send.assert_called_with("CONFigure:GPRF:MEASurement1:RFSettings:ENPower 10.0")
 
     @pytest.mark.asyncio
     async def test_meas_set_expected_power_safety(self, driver):
@@ -234,19 +224,17 @@ class TestCMW500DriverAnalyzer:
     async def test_meas_trigger_power(self, driver):
         """Test triggering power measurement."""
         await driver.meas_trigger_power()
-        driver._scpi.send.assert_called_with(
-            "INITiate:GPRF:MEASurement1:POWer"
-        )
+        driver._scpi.send.assert_called_with("INITiate:GPRF:MEASurement1:POWer")
 
     @pytest.mark.asyncio
     async def test_meas_fetch_power(self, driver):
         """Test fetching power results."""
         driver._scpi.query = AsyncMock(
             side_effect=[
-                "0,-30.5",   # current
-                "0,-30.3",   # average
-                "0,-29.8",   # maximum
-                "0,-31.0",   # minimum
+                "0,-30.5",  # current
+                "0,-30.3",  # average
+                "0,-29.8",  # maximum
+                "0,-31.0",  # minimum
             ]
         )
         result = await driver.meas_fetch_power()
@@ -270,17 +258,13 @@ class TestCMW500DriverSignalPath:
     async def test_set_signal_path_standalone(self, driver):
         """Test setting standalone signal path."""
         await driver.set_signal_path(SignalPath.STANDALONE)
-        driver._scpi.send.assert_called_with(
-            "ROUTe:GPRF:MEASurement1:SCENario SALone"
-        )
+        driver._scpi.send.assert_called_with("ROUTe:GPRF:MEASurement1:SCENario SALone")
 
     @pytest.mark.asyncio
     async def test_set_signal_path_cspath(self, driver):
         """Test setting combined signal path."""
         await driver.set_signal_path(SignalPath.CS_PATH)
-        driver._scpi.send.assert_called_with(
-            "ROUTe:GPRF:MEASurement1:SCENario CSPath"
-        )
+        driver._scpi.send.assert_called_with("ROUTe:GPRF:MEASurement1:SCENario CSPath")
 
     @pytest.mark.asyncio
     async def test_get_signal_path(self, driver):
@@ -350,16 +334,12 @@ class TestCMW500DriverLTE:
     async def test_lte_configure_cdrx(self, driver):
         """Test C-DRX configuration."""
         await driver.lte_configure_cdrx(True)
-        driver._scpi.send.assert_called_with(
-            "CONFigure:LTE:SIGN1:CONNection:CDRX:ENABle ON"
-        )
+        driver._scpi.send.assert_called_with("CONFigure:LTE:SIGN1:CONNection:CDRX:ENABle ON")
 
     @pytest.mark.asyncio
     async def test_lte_get_ue_info(self, driver):
         """Test getting UE info."""
-        driver._scpi.query = AsyncMock(
-            side_effect=["CONN", "ON"]
-        )
+        driver._scpi.query = AsyncMock(side_effect=["CONN", "ON"])
         info = await driver.lte_get_ue_info()
         assert info["connection_state"] == "CONN"
         assert info["cell_state"] == "ON"
@@ -379,9 +359,7 @@ class TestCMW500DriverLTEMeas:
     async def test_lte_meas_trigger(self, driver):
         """Test triggering LTE measurement."""
         await driver.lte_meas_trigger()
-        driver._scpi.send.assert_called_with(
-            "INITiate:LTE:MEAS1:MEValuation"
-        )
+        driver._scpi.send.assert_called_with("INITiate:LTE:MEAS1:MEValuation")
 
     @pytest.mark.asyncio
     async def test_lte_meas_fetch_power(self, driver):
@@ -420,10 +398,10 @@ class TestCMW500DriverLTEMeas:
         """Test fetching all LTE measurements."""
         driver._scpi.query = AsyncMock(
             side_effect=[
-                "0,23.5,23.2",    # power
-                "0,2.5,8.1",      # evm
+                "0,23.5,23.2",  # power
+                "0,2.5,8.1",  # evm
                 "0,-35.0,-34.5",  # aclr
-                "0,0,5.2",        # sem
+                "0,0,5.2",  # sem
             ]
         )
         result = await driver.lte_meas_fetch_all()

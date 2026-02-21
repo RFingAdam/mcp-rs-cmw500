@@ -80,9 +80,7 @@ class TestInstrumentInfo:
     """Test InstrumentInfo model."""
 
     def test_from_idn(self):
-        info = InstrumentInfo.from_idn(
-            "Rohde&Schwarz,CMW500,1234567,V3.8.10"
-        )
+        info = InstrumentInfo.from_idn("Rohde&Schwarz,CMW500,1234567,V3.8.10")
         assert info.manufacturer == "Rohde&Schwarz"
         assert info.model == "CMW500"
         assert info.serial_number == "1234567"
@@ -189,11 +187,13 @@ class TestCellConfig:
         assert d["dl_earfcn"] == 3100
 
     def test_from_dict(self):
-        config = CellConfig.from_dict({
-            "band": 3,
-            "bandwidth_mhz": 5.0,
-            "dl_earfcn": 1575,
-        })
+        config = CellConfig.from_dict(
+            {
+                "band": 3,
+                "bandwidth_mhz": 5.0,
+                "dl_earfcn": 1575,
+            }
+        )
         assert config.band == 3
         assert config.bandwidth_mhz == 5.0
 

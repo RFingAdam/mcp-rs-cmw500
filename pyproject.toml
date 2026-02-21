@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rs-cmw500-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for Rohde & Schwarz CMW500 Wideband Radio Communication Tester via TCP/IP SCPI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -21,6 +21,10 @@ keywords = [
     "rf-testing",
     "lte",
     "cellular",
+    "wlan",
+    "wifi",
+    "bluetooth",
+    "ble",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -64,6 +68,9 @@ packages = ["src/rs_cmw500_mcp"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: marks tests requiring real CMW500 hardware (deselect with '-m \"not integration\"')",
+]
 
 [tool.ruff]
 line-length = 100

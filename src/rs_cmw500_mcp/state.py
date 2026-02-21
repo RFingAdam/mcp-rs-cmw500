@@ -1,10 +1,13 @@
 """Instrument state management for CMW500 configuration persistence."""
 
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -139,8 +142,8 @@ class InstrumentState:
         if data.get("timestamp"):
             try:
                 timestamp = datetime.fromisoformat(data["timestamp"])
-            except ValueError:
-                pass
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not parse timestamp '{data['timestamp']}': {e}")
 
         return cls(
             generator=generator,
@@ -222,42 +225,36 @@ class StateManager:
 
         # Try to read current generator settings
         try:
-            freq_resp = await cmw.scpi_query(
-                "SOURce:GPRF:GENerator1:RFSettings:FREQuency?"
-            )
+            freq_resp = await cmw.scpi_query("SOURce:GPRF:GENerator1:RFSettings:FREQuency?")
             generator.frequency_hz = float(freq_resp)
-        except Exception:
-            pass
+        except (OSError, ValueError) as e:
+            logger.debug(f"Could not read generator frequency: {e}")
 
         try:
-            level_resp = await cmw.scpi_query(
-                "SOURce:GPRF:GENerator1:RFSettings:LEVel?"
-            )
+            level_resp = await cmw.scpi_query("SOURce:GPRF:GENerator1:RFSettings:LEVel?")
             generator.level_dbm = float(level_resp)
-        except Exception:
-            pass
+        except (OSError, ValueError) as e:
+            logger.debug(f"Could not read generator level: {e}")
 
         analyzer = AnalyzerState()
         try:
-            freq_resp = await cmw.scpi_query(
-                "CONFigure:GPRF:MEASurement1:RFSettings:FREQuency?"
-            )
+            freq_resp = await cmw.scpi_query("CONFigure:GPRF:MEASurement1:RFSettings:FREQuency?")
             analyzer.frequency_hz = float(freq_resp)
-        except Exception:
-            pass
+        except (OSError, ValueError) as e:
+            logger.debug(f"Could not read analyzer frequency: {e}")
 
         try:
             path_resp = await cmw.scpi_query("ROUTe:GPRF:MEASurement1:SCENario?")
             analyzer.signal_path = path_resp.strip()
-        except Exception:
-            pass
+        except (OSError, ValueError) as e:
+            logger.debug(f"Could not read signal path: {e}")
 
         lte = LTEState(cell_on=cmw._cell_on)
         try:
             conn_state = await cmw.lte_get_connection_state()
             lte.connection_state = conn_state.strip()
-        except Exception:
-            pass
+        except OSError as e:
+            logger.debug(f"Could not read LTE connection state: {e}")
 
         instrument_info = {}
         if cmw.info:
@@ -305,16 +302,21 @@ class StateManager:
         for filepath in self.state_directory.glob("*.json"):
             try:
                 state = InstrumentState.load(filepath)
-                states.append({
-                    "filename": filepath.name,
-                    "path": str(filepath),
-                    "summary": state.get_summary(),
-                })
-            except Exception as e:
-                states.append({
-                    "filename": filepath.name,
-                    "path": str(filepath),
-                    "error": str(e),
-                })
+                states.append(
+                    {
+                        "filename": filepath.name,
+                        "path": str(filepath),
+                        "summary": state.get_summary(),
+                    }
+                )
+            except (json.JSONDecodeError, KeyError, OSError) as e:
+                logger.warning(f"Could not load state file {filepath}: {e}")
+                states.append(
+                    {
+                        "filename": filepath.name,
+                        "path": str(filepath),
+                        "error": str(e),
+                    }
+                )
 
         return states
