@@ -1,6 +1,5 @@
 """Tests for MCP server creation."""
 
-
 from rs_cmw500_mcp.server import create_server
 
 

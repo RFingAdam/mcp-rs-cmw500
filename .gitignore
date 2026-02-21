@@ -127,3 +127,6 @@ Thumbs.db
 
 # State files
 cmw_states/
+
+# Claude Code
+.claude/

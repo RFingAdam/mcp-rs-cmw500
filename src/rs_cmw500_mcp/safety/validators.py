@@ -40,14 +40,12 @@ def sanitize_scpi_param(value: str) -> str:
 
     if _SCPI_DANGEROUS_CHARS.search(value):
         raise ValueError(
-            f"SCPI parameter contains prohibited characters (semicolons, newlines): "
-            f"{value!r}"
+            f"SCPI parameter contains prohibited characters (semicolons, newlines): {value!r}"
         )
 
     if value.lstrip().startswith("*"):
         raise ValueError(
-            f"SCPI parameter must not start with '*' (could trigger instrument commands): "
-            f"{value!r}"
+            f"SCPI parameter must not start with '*' (could trigger instrument commands): {value!r}"
         )
 
     return value
@@ -76,8 +74,7 @@ def validate_safe_path(user_path: str | Path, base_dir: str | Path) -> Path:
     # Check that resolved path is within base directory
     if not resolved.is_relative_to(base):
         raise ValueError(
-            f"Path traversal detected: resolved path {resolved} "
-            f"is not within base directory {base}"
+            f"Path traversal detected: resolved path {resolved} is not within base directory {base}"
         )
 
     # Check for symlinks that point outside base_dir
@@ -191,8 +188,8 @@ class SafetyValidator:
         """
         if frequency_hz > self.limits.max_frequency_hz:
             raise SafetyError(
-                f"Frequency {frequency_hz/1e9:.3f} GHz exceeds maximum "
-                f"{self.limits.max_frequency_hz/1e9:.3f} GHz",
+                f"Frequency {frequency_hz / 1e9:.3f} GHz exceeds maximum "
+                f"{self.limits.max_frequency_hz / 1e9:.3f} GHz",
                 parameter="frequency_hz",
                 value=frequency_hz,
                 limit=self.limits.max_frequency_hz,
@@ -200,14 +197,14 @@ class SafetyValidator:
 
         if frequency_hz < self.limits.min_frequency_hz:
             raise SafetyError(
-                f"Frequency {frequency_hz/1e6:.3f} MHz below minimum "
-                f"{self.limits.min_frequency_hz/1e6:.3f} MHz",
+                f"Frequency {frequency_hz / 1e6:.3f} MHz below minimum "
+                f"{self.limits.min_frequency_hz / 1e6:.3f} MHz",
                 parameter="frequency_hz",
                 value=frequency_hz,
                 limit=self.limits.min_frequency_hz,
             )
 
-        logger.debug(f"Frequency {frequency_hz/1e6:.3f} MHz validated")
+        logger.debug(f"Frequency {frequency_hz / 1e6:.3f} MHz validated")
 
     def validate_dl_level(self, level_dbm: float) -> None:
         """
@@ -232,8 +229,7 @@ class SafetyValidator:
 
         if level_dbm < self.limits.min_generator_power_dbm:
             raise SafetyError(
-                f"DL level {level_dbm} dBm below minimum "
-                f"{self.limits.min_generator_power_dbm} dBm",
+                f"DL level {level_dbm} dBm below minimum {self.limits.min_generator_power_dbm} dBm",
                 parameter="dl_level_dbm",
                 value=level_dbm,
                 limit=self.limits.min_generator_power_dbm,

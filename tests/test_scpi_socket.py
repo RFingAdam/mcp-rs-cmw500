@@ -127,9 +127,7 @@ class TestSCPISocketCommunication:
     @pytest.mark.asyncio
     async def test_query(self, connected_socket):
         """Test query."""
-        connected_socket._reader.readline = AsyncMock(
-            return_value=b"Rohde&Schwarz,CMW500\n"
-        )
+        connected_socket._reader.readline = AsyncMock(return_value=b"Rohde&Schwarz,CMW500\n")
 
         async def mock_wait_for(coro, **kw):
             return await coro
@@ -141,9 +139,7 @@ class TestSCPISocketCommunication:
     @pytest.mark.asyncio
     async def test_query_float_list(self, connected_socket):
         """Test float list query."""
-        connected_socket._reader.readline = AsyncMock(
-            return_value=b"1.0,2.0,3.0\n"
-        )
+        connected_socket._reader.readline = AsyncMock(return_value=b"1.0,2.0,3.0\n")
 
         async def mock_wait_for(coro, **kw):
             return await coro

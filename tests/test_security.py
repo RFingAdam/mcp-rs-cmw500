@@ -1,6 +1,5 @@
 """Tests for security hardening: SCPI sanitization, path validation, raw SCPI guards."""
 
-import logging
 import os
 import tempfile
 from pathlib import Path
@@ -10,7 +9,6 @@ import pytest
 
 from rs_cmw500_mcp.config import CMWSettings
 from rs_cmw500_mcp.safety.validators import sanitize_scpi_param, validate_safe_path
-
 
 # =============================================================================
 # Issue 1: sanitize_scpi_param tests
@@ -39,7 +37,8 @@ class TestSanitizeScpiParam:
     def test_file_path_on_instrument_passes(self):
         """CMW500 instrument file paths (no semicolons/newlines) should pass."""
         assert sanitize_scpi_param("C:\\R_S\\CMW\\waveform.wv") == "C:\\R_S\\CMW\\waveform.wv"
-        assert sanitize_scpi_param("/usr/local/waveforms/test.arb") == "/usr/local/waveforms/test.arb"
+        path = "/usr/local/waveforms/test.arb"
+        assert sanitize_scpi_param(path) == path
 
     def test_semicolon_rejected(self):
         """Semicolons (SCPI command separator) must be rejected."""
@@ -133,6 +132,7 @@ class TestValidateSafePath:
     def teardown_method(self):
         """Clean up temp directory."""
         import shutil
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_simple_filename_passes(self):
@@ -239,41 +239,45 @@ class TestRawScpiGuard:
         """cmw_scpi_send should return error when raw SCPI is disabled."""
         from rs_cmw500_mcp.tools import handle_tool
 
-        with patch("rs_cmw500_mcp.tools.get_settings") as mock_settings:
+        with patch("rs_cmw500_mcp.tools.scpi.get_settings") as mock_settings:
             settings = CMWSettings(allow_raw_scpi=False)
             mock_settings.return_value = settings
 
             result = await handle_tool("cmw_scpi_send", {"command": "*RST"})
             assert len(result.content) == 1
             assert result.isError is True
-            assert "disabled" in result.content[0].text.lower() or "error" in result.content[0].text.lower()
+            text = result.content[0].text.lower()
+            assert "disabled" in text or "error" in text
 
     @pytest.mark.asyncio
     async def test_scpi_query_blocked_when_disabled(self):
         """cmw_scpi_query should return error when raw SCPI is disabled."""
         from rs_cmw500_mcp.tools import handle_tool
 
-        with patch("rs_cmw500_mcp.tools.get_settings") as mock_settings:
+        with patch("rs_cmw500_mcp.tools.scpi.get_settings") as mock_settings:
             settings = CMWSettings(allow_raw_scpi=False)
             mock_settings.return_value = settings
 
             result = await handle_tool("cmw_scpi_query", {"command": "*IDN?"})
             assert len(result.content) == 1
             assert result.isError is True
-            assert "disabled" in result.content[0].text.lower() or "error" in result.content[0].text.lower()
+            text = result.content[0].text.lower()
+            assert "disabled" in text or "error" in text
 
     @pytest.mark.asyncio
     async def test_scpi_send_logs_warning_when_enabled(self):
         """cmw_scpi_send should log WARNING with command when allowed."""
-        from rs_cmw500_mcp import tools
         from rs_cmw500_mcp.tools import handle_tool
+        from rs_cmw500_mcp.tools import scpi as scpi_module
 
         mock_cmw = AsyncMock()
         mock_cmw.is_connected = True
 
-        with patch("rs_cmw500_mcp.tools.get_settings") as mock_settings, \
-             patch("rs_cmw500_mcp.tools._get_cmw", return_value=mock_cmw), \
-             patch.object(tools.logger, "warning") as mock_warning:
+        with (
+            patch("rs_cmw500_mcp.tools.scpi.get_settings") as mock_settings,
+            patch("rs_cmw500_mcp.tools.scpi._get_cmw", return_value=mock_cmw),
+            patch.object(scpi_module.logger, "warning") as mock_warning,
+        ):
             settings = CMWSettings(allow_raw_scpi=True)
             mock_settings.return_value = settings
 
@@ -287,16 +291,18 @@ class TestRawScpiGuard:
     @pytest.mark.asyncio
     async def test_scpi_query_logs_warning_when_enabled(self):
         """cmw_scpi_query should log WARNING with command when allowed."""
-        from rs_cmw500_mcp import tools
         from rs_cmw500_mcp.tools import handle_tool
+        from rs_cmw500_mcp.tools import scpi as scpi_module
 
         mock_cmw = AsyncMock()
         mock_cmw.is_connected = True
         mock_cmw.scpi_query = AsyncMock(return_value="some_response")
 
-        with patch("rs_cmw500_mcp.tools.get_settings") as mock_settings, \
-             patch("rs_cmw500_mcp.tools._get_cmw", return_value=mock_cmw), \
-             patch.object(tools.logger, "warning") as mock_warning:
+        with (
+            patch("rs_cmw500_mcp.tools.scpi.get_settings") as mock_settings,
+            patch("rs_cmw500_mcp.tools.scpi._get_cmw", return_value=mock_cmw),
+            patch.object(scpi_module.logger, "warning") as mock_warning,
+        ):
             settings = CMWSettings(allow_raw_scpi=True)
             mock_settings.return_value = settings
 
@@ -312,7 +318,7 @@ class TestRawScpiGuard:
         """Error message should tell user how to enable raw SCPI."""
         from rs_cmw500_mcp.tools import handle_tool
 
-        with patch("rs_cmw500_mcp.tools.get_settings") as mock_settings:
+        with patch("rs_cmw500_mcp.tools.scpi.get_settings") as mock_settings:
             settings = CMWSettings(allow_raw_scpi=False)
             mock_settings.return_value = settings
 

@@ -23,9 +23,7 @@ def mock_scpi_socket():
     socket.address = "192.168.1.100:5025"
 
     # Default responses
-    socket.query = AsyncMock(
-        return_value="Rohde&Schwarz,CMW500,1234567,V3.8.10"
-    )
+    socket.query = AsyncMock(return_value="Rohde&Schwarz,CMW500,1234567,V3.8.10")
     socket.send = AsyncMock()
     socket.wait_opc = AsyncMock(return_value=True)
     socket.query_float_list = AsyncMock(return_value=[1e9, 1.5e9, 2e9])

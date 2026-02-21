@@ -12,6 +12,7 @@ class WLANTxTemplate(MeasurementTemplate):
 
     Configures CMW500 for WLAN TX power and modulation quality
     measurement across various 802.11 standards and bandwidths.
+    Uses the native WLAN SCPI subsystem for proper configuration.
     """
 
     name: str = "WLAN 802.11ax 80 MHz TX"
@@ -23,8 +24,8 @@ class WLANTxTemplate(MeasurementTemplate):
         if not self.parameters:
             self.parameters = {
                 "technology": "wlan",
-                "standard": "802.11ax",
-                "bandwidth_mhz": 80,
+                "standard": "AX",
+                "bandwidth": "BW80",
                 "channel": 36,
                 "frequency_hz": 5.18e9,
                 "expected_power_dbm": 20.0,
@@ -38,8 +39,8 @@ class WLANTxTemplate(MeasurementTemplate):
             description="WLAN 802.11ax 80 MHz TX power and modulation quality measurement",
             parameters={
                 "technology": "wlan",
-                "standard": "802.11ax",
-                "bandwidth_mhz": 80,
+                "standard": "AX",
+                "bandwidth": "BW80",
                 "channel": 36,
                 "frequency_hz": 5.18e9,
                 "expected_power_dbm": 20.0,
@@ -54,8 +55,8 @@ class WLANTxTemplate(MeasurementTemplate):
             description="WLAN 802.11ax 40 MHz TX measurement",
             parameters={
                 "technology": "wlan",
-                "standard": "802.11ax",
-                "bandwidth_mhz": 40,
+                "standard": "AX",
+                "bandwidth": "BW40",
                 "channel": 36,
                 "frequency_hz": 5.19e9,
                 "expected_power_dbm": 20.0,
@@ -70,8 +71,8 @@ class WLANTxTemplate(MeasurementTemplate):
             description="WLAN 802.11ac 80 MHz TX measurement",
             parameters={
                 "technology": "wlan",
-                "standard": "802.11ac",
-                "bandwidth_mhz": 80,
+                "standard": "AC",
+                "bandwidth": "BW80",
                 "channel": 36,
                 "frequency_hz": 5.18e9,
                 "expected_power_dbm": 20.0,
@@ -82,14 +83,17 @@ class WLANTxTemplate(MeasurementTemplate):
         """
         Apply WLAN TX measurement configuration to CMW500.
 
+        Uses the native WLAN SCPI subsystem for proper measurement setup.
+
         Args:
             cmw: CMW500Driver instance
         """
-        from ..models.cmw_types import SignalPath
+        from ..models.cmw_types import WLANBandwidth, WLANMeasConfig, WLANStandard
 
-        # Set signal path to standalone for WLAN measurements
-        await cmw.set_signal_path(SignalPath.STANDALONE)
-
-        # Configure analyzer for WLAN measurement
-        await cmw.meas_set_frequency(self.parameters["frequency_hz"])
-        await cmw.meas_set_expected_power(self.parameters["expected_power_dbm"])
+        config = WLANMeasConfig(
+            standard=WLANStandard(self.parameters.get("standard", "AX")),
+            bandwidth=WLANBandwidth(self.parameters.get("bandwidth", "BW80")),
+            frequency_hz=self.parameters.get("frequency_hz", 5.18e9),
+            expected_power_dbm=self.parameters.get("expected_power_dbm", 20.0),
+        )
+        await cmw.wlan_configure(config)

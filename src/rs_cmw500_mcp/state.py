@@ -225,26 +225,20 @@ class StateManager:
 
         # Try to read current generator settings
         try:
-            freq_resp = await cmw.scpi_query(
-                "SOURce:GPRF:GENerator1:RFSettings:FREQuency?"
-            )
+            freq_resp = await cmw.scpi_query("SOURce:GPRF:GENerator1:RFSettings:FREQuency?")
             generator.frequency_hz = float(freq_resp)
         except (OSError, ValueError) as e:
             logger.debug(f"Could not read generator frequency: {e}")
 
         try:
-            level_resp = await cmw.scpi_query(
-                "SOURce:GPRF:GENerator1:RFSettings:LEVel?"
-            )
+            level_resp = await cmw.scpi_query("SOURce:GPRF:GENerator1:RFSettings:LEVel?")
             generator.level_dbm = float(level_resp)
         except (OSError, ValueError) as e:
             logger.debug(f"Could not read generator level: {e}")
 
         analyzer = AnalyzerState()
         try:
-            freq_resp = await cmw.scpi_query(
-                "CONFigure:GPRF:MEASurement1:RFSettings:FREQuency?"
-            )
+            freq_resp = await cmw.scpi_query("CONFigure:GPRF:MEASurement1:RFSettings:FREQuency?")
             analyzer.frequency_hz = float(freq_resp)
         except (OSError, ValueError) as e:
             logger.debug(f"Could not read analyzer frequency: {e}")
@@ -308,17 +302,21 @@ class StateManager:
         for filepath in self.state_directory.glob("*.json"):
             try:
                 state = InstrumentState.load(filepath)
-                states.append({
-                    "filename": filepath.name,
-                    "path": str(filepath),
-                    "summary": state.get_summary(),
-                })
+                states.append(
+                    {
+                        "filename": filepath.name,
+                        "path": str(filepath),
+                        "summary": state.get_summary(),
+                    }
+                )
             except (json.JSONDecodeError, KeyError, OSError) as e:
                 logger.warning(f"Could not load state file {filepath}: {e}")
-                states.append({
-                    "filename": filepath.name,
-                    "path": str(filepath),
-                    "error": str(e),
-                })
+                states.append(
+                    {
+                        "filename": filepath.name,
+                        "path": str(filepath),
+                        "error": str(e),
+                    }
+                )
 
         return states

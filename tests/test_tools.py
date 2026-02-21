@@ -3,8 +3,8 @@
 import asyncio
 
 import pytest
-
 from mcp.types import CallToolResult
+
 from rs_cmw500_mcp.tools import get_tools, handle_tool
 
 
@@ -185,29 +185,40 @@ class TestToolHandlers:
     async def test_define_and_check_limits(self):
         """Test define and check limits workflow."""
         # Define a limit
-        result = await handle_tool("cmw_define_limit", {
-            "name": "test_power_limit",
-            "parameter": "power_dbm",
-            "max_value": 23.0,
-            "min_value": 20.0,
-            "unit": "dBm",
-        })
+        result = await handle_tool(
+            "cmw_define_limit",
+            {
+                "name": "test_power_limit",
+                "parameter": "power_dbm",
+                "max_value": 23.0,
+                "min_value": 20.0,
+                "unit": "dBm",
+            },
+        )
         assert result.isError is False
         assert "ok" in result.content[0].text
 
         # Check passing measurement
-        result = await handle_tool("cmw_check_limits", {
-            "measurements": {"power_dbm": 21.5},
-        })
+        result = await handle_tool(
+            "cmw_check_limits",
+            {
+                "measurements": {"power_dbm": 21.5},
+            },
+        )
         assert result.isError is False
-        assert "true" in result.content[0].text.lower() or "passed" in result.content[0].text.lower()
+        text = result.content[0].text.lower()
+        assert "true" in text or "passed" in text
 
         # Check failing measurement
-        result = await handle_tool("cmw_check_limits", {
-            "measurements": {"power_dbm": 25.0},
-        })
+        result = await handle_tool(
+            "cmw_check_limits",
+            {
+                "measurements": {"power_dbm": 25.0},
+            },
+        )
         assert result.isError is False
-        assert "false" in result.content[0].text.lower() or "failed" in result.content[0].text.lower()
+        text = result.content[0].text.lower()
+        assert "false" in text or "failed" in text
 
         # Clean up
         await handle_tool("cmw_clear_limits", {})
@@ -215,37 +226,49 @@ class TestToolHandlers:
     @pytest.mark.asyncio
     async def test_load_template_handler(self):
         """Test loading a template."""
-        result = await handle_tool("cmw_load_template", {
-            "template_name": "gprf_power",
-        })
+        result = await handle_tool(
+            "cmw_load_template",
+            {
+                "template_name": "gprf_power",
+            },
+        )
         assert result.isError is False
         assert "ok" in result.content[0].text
 
     @pytest.mark.asyncio
     async def test_load_template_with_params(self):
         """Test loading a template with parameter overrides."""
-        result = await handle_tool("cmw_load_template", {
-            "template_name": "lte_tx_power",
-            "parameters": {"band": 7, "bandwidth_mhz": 20.0},
-        })
+        result = await handle_tool(
+            "cmw_load_template",
+            {
+                "template_name": "lte_tx_power",
+                "parameters": {"band": 7, "bandwidth_mhz": 20.0},
+            },
+        )
         assert result.isError is False
         assert "ok" in result.content[0].text
 
     @pytest.mark.asyncio
     async def test_load_wlan_tx_template(self):
         """Test loading the WLAN TX template."""
-        result = await handle_tool("cmw_load_template", {
-            "template_name": "wlan_tx",
-        })
+        result = await handle_tool(
+            "cmw_load_template",
+            {
+                "template_name": "wlan_tx",
+            },
+        )
         assert result.isError is False
         assert "ok" in result.content[0].text
 
     @pytest.mark.asyncio
     async def test_load_unknown_template(self):
         """Test loading an unknown template returns isError=True."""
-        result = await handle_tool("cmw_load_template", {
-            "template_name": "nonexistent",
-        })
+        result = await handle_tool(
+            "cmw_load_template",
+            {
+                "template_name": "nonexistent",
+            },
+        )
         assert isinstance(result, CallToolResult)
         assert result.isError is True
         assert "Error" in result.content[0].text
@@ -258,9 +281,12 @@ class TestToolHandlers:
         assert result.isError is True
 
         # Unknown template
-        result = await handle_tool("cmw_load_template", {
-            "template_name": "bad_template",
-        })
+        result = await handle_tool(
+            "cmw_load_template",
+            {
+                "template_name": "bad_template",
+            },
+        )
         assert result.isError is True
 
     @pytest.mark.asyncio
@@ -276,10 +302,13 @@ class TestToolHandlers:
     async def test_connection_error_returns_is_error(self):
         """Connection failures should return isError=True."""
         # Trying to connect to a non-existent host should fail
-        result = await handle_tool("cmw_connect", {
-            "host": "192.0.2.1",  # RFC 5737 TEST-NET, guaranteed unreachable
-            "port": 5025,
-        })
+        result = await handle_tool(
+            "cmw_connect",
+            {
+                "host": "192.0.2.1",  # RFC 5737 TEST-NET, guaranteed unreachable
+                "port": 5025,
+            },
+        )
         assert isinstance(result, CallToolResult)
         assert result.isError is True
         assert "Error" in result.content[0].text
@@ -291,10 +320,14 @@ class TestAsyncLocks:
     @pytest.mark.asyncio
     async def test_concurrent_template_operations(self):
         """Templates should be safe under concurrent access."""
+
         async def load_template(name):
-            return await handle_tool("cmw_load_template", {
-                "template_name": name,
-            })
+            return await handle_tool(
+                "cmw_load_template",
+                {
+                    "template_name": name,
+                },
+            )
 
         # Run multiple template loads concurrently
         results = await asyncio.gather(
@@ -316,12 +349,15 @@ class TestAsyncLocks:
         await handle_tool("cmw_clear_limits", {})
 
         async def define_limit(name, param, max_val, min_val):
-            return await handle_tool("cmw_define_limit", {
-                "name": name,
-                "parameter": param,
-                "max_value": max_val,
-                "min_value": min_val,
-            })
+            return await handle_tool(
+                "cmw_define_limit",
+                {
+                    "name": name,
+                    "parameter": param,
+                    "max_value": max_val,
+                    "min_value": min_val,
+                },
+            )
 
         # Define multiple limits concurrently
         results = await asyncio.gather(
@@ -349,6 +385,7 @@ class TestPresetTimeout:
     async def test_preset_timeout_config(self):
         """Verify preset_timeout is available in config."""
         from rs_cmw500_mcp.config import CMWSettings
+
         settings = CMWSettings()
         assert hasattr(settings, "preset_timeout")
         assert settings.preset_timeout == 60.0
@@ -357,10 +394,12 @@ class TestPresetTimeout:
     async def test_preset_timeout_customizable(self):
         """Verify preset_timeout can be customized."""
         import os
+
         old = os.environ.get("CMW_PRESET_TIMEOUT")
         try:
             os.environ["CMW_PRESET_TIMEOUT"] = "120.0"
             from rs_cmw500_mcp.config import CMWSettings
+
             settings = CMWSettings()
             assert settings.preset_timeout == 120.0
         finally:

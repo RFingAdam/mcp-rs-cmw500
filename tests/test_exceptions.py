@@ -1,6 +1,5 @@
 """Tests for CMW500 exception hierarchy."""
 
-
 from rs_cmw500_mcp.exceptions import (
     CMW500Error,
     CommunicationError,
