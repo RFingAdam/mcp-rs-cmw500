@@ -22,6 +22,14 @@
 
 ---
 
+> [!IMPORTANT]
+> **Hardware required.** This MCP server controls a real R&S **CMW500**
+> Wideband Radio Communication Tester over TCP/IP SCPI. You need an
+> actual CMW500 on the network to be useful. The server is a thin
+> driver — no built-in simulator. The relevant CMW500 application
+> licenses (LTE / WLAN / Bluetooth / GPRF) must be enabled on the unit
+> for the matching tool surface to do anything.
+
 ## What is mcp-rs-cmw500?
 
 `mcp-rs-cmw500` is a [Model Context Protocol](https://modelcontextprotocol.io)
