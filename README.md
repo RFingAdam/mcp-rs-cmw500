@@ -5,7 +5,7 @@
 <br/>
 
 [![CI](https://github.com/RFingAdam/mcp-rs-cmw500/actions/workflows/ci.yml/badge.svg)](https://github.com/RFingAdam/mcp-rs-cmw500/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-Apache--2.0-1E40AF.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-1E40AF.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-server-A78BFA.svg)](https://modelcontextprotocol.io)
 [![eng-mcp-suite](https://img.shields.io/badge/eng--mcp--suite-member-22D3EE.svg)](https://github.com/RFingAdam/eng-mcp-suite)
@@ -55,7 +55,7 @@ non-signaling (Classic DH1-DH5 + LE 1M/2M/Coded), GPRF generator/analyzer
   install, no vendor middleware.
 - ✅ **Pre-built templates.** `lte_tx_power`, `gprf_power`, `nonsig_rx`,
   `wlan_tx`, `wlan_rx`, `ble_tx`, `ble_rx`, `bt_classic_tx`.
-- 🔒 **Apache-2.0.** Safety system (power / frequency clamps),
+- 🔒 **AGPL-3.0-or-later.** Safety system (power / frequency clamps),
   SCPI-injection-guarded, raw-SCPI disable flag.
 
 ---
@@ -264,7 +264,8 @@ mypy src/rs_cmw500_mcp/
 
 ## License
 
-[Apache-2.0](LICENSE).
+[AGPL-3.0-or-later](LICENSE). Relicensed from Apache-2.0 in v0.3.0 to
+align with the eng-mcp-suite toolkit-wide AGPL move.
 
 ## Acknowledgments
 

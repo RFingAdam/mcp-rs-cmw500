@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rs-cmw500-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP server for Rohde & Schwarz CMW500 Wideband Radio Communication Tester via TCP/IP SCPI"
 readme = "README.md"
-license = "Apache-2.0"
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.10"
 authors = [
     { name = "Adam Engelbrecht", email = "adam@rfingadam.com" }
@@ -30,7 +30,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
