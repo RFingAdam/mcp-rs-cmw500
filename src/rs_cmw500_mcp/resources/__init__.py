@@ -208,6 +208,11 @@ _DYNAMIC: dict[str, tuple[str, str, str]] = {
         "Installed options queried from the instrument",
         MIME_JSON,
     ),
+    "cmw://profile": (
+        "Active bench profile (JSON)",
+        "The loaded per-unit bench profile (connection/routing/attenuation/licenses)",
+        MIME_JSON,
+    ),
 }
 
 
@@ -270,6 +275,15 @@ def _band_presets_json() -> str:
         return json.dumps({"error": f"Could not read presets file {path}: {exc}"})
 
 
+def _profile_json() -> str:
+    from ..profile import get_active_profile
+
+    profile = get_active_profile()
+    if profile is None:
+        return json.dumps({"active": False})
+    return json.dumps({"active": True, "profile": profile.to_dict()}, indent=2)
+
+
 async def _capabilities_json() -> str:
     # Import here to avoid a resources<->tools import cycle at module load.
     from ..tools.shared import _get_cmw
@@ -301,4 +315,6 @@ async def read_resource(uri: str) -> tuple[str, str]:
         return _band_presets_json(), MIME_JSON
     if uri == "cmw://capabilities":
         return await _capabilities_json(), MIME_JSON
+    if uri == "cmw://profile":
+        return _profile_json(), MIME_JSON
     raise ValueError(f"Unknown resource: {uri}")

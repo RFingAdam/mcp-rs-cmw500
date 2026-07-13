@@ -66,6 +66,15 @@ async def run_server() -> None:
     settings.configure_logging()
 
     logger.info("Starting R&S CMW500 MCP Server")
+
+    if settings.profile_file:
+        from .profile import load_active_profile
+
+        try:
+            load_active_profile(settings.profile_file)
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not load CMW_PROFILE_FILE %s: %s", settings.profile_file, exc)
+
     logger.info(f"Default connection: {settings.default_host}:{settings.default_port}")
 
     server = create_server()

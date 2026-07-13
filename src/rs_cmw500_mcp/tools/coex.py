@@ -42,12 +42,24 @@ def _victim_from_args(args: dict[str, Any]) -> VictimSpec:
 
 
 async def _handle_coex_validate_routing(args: dict[str, Any]) -> CallToolResult:
-    connectors = args.get("connectors") or {}
+    connectors = args.get("connectors")
+    source = "argument"
+    if not connectors:
+        from ..profile import get_active_profile
+
+        profile = get_active_profile()
+        if profile and profile.routing:
+            connectors = profile.connector_map()
+            source = f"profile:{profile.name}"
+    if not connectors:
+        return _format_error(
+            ValueError("No connectors provided and no active profile routing to check.")
+        )
     try:
         validate_routing(connectors)
     except RoutingError as exc:
         return _format_error(exc)
-    return _format_result({"status": "ok", "connectors": connectors})
+    return _format_result({"status": "ok", "connectors": connectors, "source": source})
 
 
 async def _handle_coex_plan(args: dict[str, Any]) -> CallToolResult:
@@ -157,11 +169,11 @@ registry.register(
             "properties": {
                 "connectors": {
                     "type": "object",
-                    "description": "subsystem -> connector, e.g. {'lte':'RF1COM'}",
+                    "description": "subsystem -> connector, e.g. {'lte':'RF1COM'}. "
+                    "Omit to use the active bench profile's routing map.",
                     "additionalProperties": {"type": "string"},
                 }
             },
-            "required": ["connectors"],
         },
     ),
     _handle_coex_validate_routing,

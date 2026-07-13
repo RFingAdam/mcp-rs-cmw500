@@ -27,6 +27,7 @@ from . import (  # noqa: F401, E402
     limits_tools,
     lte,
     lte_rx,
+    profile_tools,
     rf_planner,
     scpi,
     state_tools,
