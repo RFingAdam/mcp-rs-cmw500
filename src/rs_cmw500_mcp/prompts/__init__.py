@@ -70,9 +70,11 @@ Suggested tool sequence:
    `cmw_wlan_sig_ap_on`; associate the DUT and confirm with `cmw_wlan_sig_get_state`.
 4. LTE aggressor: `cmw_lte_rx_configure` (band {a.get("lte_band", "7")}) + `cmw_lte_attach_wait`,
    or set an uplink/downlink condition as your aggressor.
-5. Measure the Wi-Fi victim metric (throughput via DAU is license-gated and
-   reached through raw SCPI + cmw://scpi/wlan-signaling; TX quality via cmw_wlan_* ).
-6. Repeat across LTE conditions and compare against an LTE-off baseline.
+5. Measure the Wi-Fi victim metric: `cmw_data_throughput` (direction DL/UL) for IP
+   throughput, or `cmw_data_iperf_run` for TCP/UDP (requires DAU: CMW-B450/KM050).
+   TX quality via cmw_wlan_* . See cmw://scpi/wlan-throughput.
+6. Repeat across LTE conditions and compare against an LTE-off baseline. Wrap the
+   whole sequence in a cmw_testplan for pass/fail + a report.
 
 {_SAFETY}"""
 

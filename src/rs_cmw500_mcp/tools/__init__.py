@@ -36,6 +36,7 @@ from . import (  # noqa: F401, E402
     testplan_tools,
     wlan,
     wlan_signaling,
+    wlan_throughput,
 )
 
 

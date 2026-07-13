@@ -34,7 +34,8 @@ Universal patterns used across subsystems:
   (see cmw://reference/reliability-codes).
 
 Per-subsystem sheets: cmw://scpi/lte-signaling, cmw://scpi/bluetooth-signaling,
-cmw://scpi/wlan-signaling, cmw://scpi/gprf, cmw://scpi/routing, cmw://scpi/system.
+cmw://scpi/wlan-signaling, cmw://scpi/wlan-throughput, cmw://scpi/gsm-signaling,
+cmw://scpi/wcdma-signaling, cmw://scpi/gprf, cmw://scpi/routing, cmw://scpi/system.
 Data: cmw://reference/band-plan, cmw://reference/reliability-codes,
 cmw://reference/band-presets. Live: cmw://capabilities.
 
@@ -155,6 +156,26 @@ set depends on the application and firmware; consult the R&S manual for the full
 table. In this server: LTE EBL 19 -> dropped; BLE PER 0 -> valid.
 """
 
+_SCPI_DAU = """# WLAN throughput — Data Application Unit (DAU)
+
+Requires DAU hardware (CMW-B450) + option KM050; pair with WLAN signaling
+(CMW as AP, DUT associated). Overall IP throughput (well-grounded):
+- `INITiate:DATA:MEASurement1:THRoughput`
+- `FETCh:DATA:MEASurement1:THRoughput:OVERall:DLINk?`  -> reliability,cur,min,max,avg (bit/s)
+- `FETCh:DATA:MEASurement1:THRoughput:OVERall:ULINk?`  (uplink variant)
+
+iPerf / ping (simplified here; validate on hardware):
+- `CONFigure:DATA:MEASurement1:IPERf:PROTocol TCP|UDP`, `INITiate:DATA:MEASurement1:IPERf`,
+  `FETCh:DATA:MEASurement1:IPERf:ALL?`
+- `CONFigure:DATA:MEASurement1:PING:DADDress '<ip>'`, `INITiate:DATA:MEASurement1:PING`,
+  `FETCh:DATA:MEASurement1:PING:ALL?`
+- IP services (DHCP/DNS/addressing) live under `CONFigure:DATA:CONTrol:...` — reach via
+  raw SCPI once licensed.
+
+Typed tools: cmw_data_throughput, cmw_data_iperf_run, cmw_data_ping. This is the
+Wi-Fi victim metric for the lte_wifi_coexistence_throughput prompt.
+"""
+
 # Static markdown resources keyed by URI: uri -> (name, description, content).
 _STATIC: dict[str, tuple[str, str, str]] = {
     "cmw://scpi/index": (
@@ -184,6 +205,11 @@ _STATIC: dict[str, tuple[str, str, str]] = {
         _SCPI_ROUTING,
     ),
     "cmw://scpi/system": ("System SCPI", "System/common SCPI commands", _SCPI_SYSTEM),
+    "cmw://scpi/wlan-throughput": (
+        "WLAN throughput / DAU SCPI",
+        "Data Application Unit IP throughput / iPerf / ping",
+        _SCPI_DAU,
+    ),
     "cmw://reference/reliability-codes": (
         "Reliability codes",
         "CMW result reliability indicator table",
