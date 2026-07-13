@@ -156,6 +156,34 @@ set depends on the application and firmware; consult the R&S manual for the full
 table. In this server: LTE EBL 19 -> dropped; BLE PER 0 -> valid.
 """
 
+_SCPI_GSM = """# GSM/GPRS signaling (options CMW-KS200/KM200 — app-note-derived)
+
+- `CONFigure:GSM:SIGN1:BAND <G09|G18|...>`
+- `CONFigure:GSM:SIGN1:RFSettings:CHANnel:TCH <arfcn>` (and `:BCH`)
+- `CONFigure:GSM:SIGN1:RFSettings:LEVel <dBm>`
+- `SOURce:GSM:SIGN1:STATe ON|OFF`, `SOURce:GSM:SIGN1:STATe:ALL?`
+- `SENSe:GSM:SIGN1:CSWitched:STATe?` (connection state)
+- TX: `INITiate:GSM:MEAS1:MEValuation`, `FETCh:GSM:MEAS1:MEValuation:POWer:CURRent?`
+- RX: `FETCh:GSM:SIGN1:BER?`
+
+Typed tools: cmw_gsm_sig_configure, cmw_gsm_sig_cell_on/off, cmw_gsm_sig_get_state,
+cmw_gsm_meas_tx, cmw_gsm_sig_ber. Validate on hardware.
+"""
+
+_SCPI_WCDMA = """# WCDMA/UMTS signaling (options CMW-KS400/KM400 — app-note-derived)
+
+- `CONFigure:WCDMa:SIGN1:CARRier:BAND <OB1|...>`
+- `CONFigure:WCDMa:SIGN1:CARRier:DL:CHANnel <uarfcn>`
+- `CONFigure:WCDMa:SIGN1:DOWNlink:LEVel <dBm>`
+- `SOURce:WCDMa:SIGN1:CELL:STATe ON|OFF`, `SOURce:WCDMa:SIGN1:CELL:STATe:ALL?`
+- `SENSe:WCDMa:SIGN1:CONNection:STATe?` (RRC state)
+- TX: `INITiate:WCDMa:MEAS1:MEValuation`, `FETCh:WCDMa:MEAS1:MEValuation:POWer:CURRent?`
+- RX: `FETCh:WCDMa:SIGN1:BER?`
+
+Typed tools: cmw_wcdma_sig_configure, cmw_wcdma_sig_cell_on/off, cmw_wcdma_sig_get_state,
+cmw_wcdma_meas_tx, cmw_wcdma_sig_ber. Validate on hardware.
+"""
+
 _SCPI_DAU = """# WLAN throughput — Data Application Unit (DAU)
 
 Requires DAU hardware (CMW-B450) + option KM050; pair with WLAN signaling
@@ -205,6 +233,16 @@ _STATIC: dict[str, tuple[str, str, str]] = {
         _SCPI_ROUTING,
     ),
     "cmw://scpi/system": ("System SCPI", "System/common SCPI commands", _SCPI_SYSTEM),
+    "cmw://scpi/gsm-signaling": (
+        "GSM signaling SCPI",
+        "GSM/GPRS cell + TX/BER SCPI (license-gated)",
+        _SCPI_GSM,
+    ),
+    "cmw://scpi/wcdma-signaling": (
+        "WCDMA signaling SCPI",
+        "WCDMA/UMTS cell + TX/BER SCPI (license-gated)",
+        _SCPI_WCDMA,
+    ),
     "cmw://scpi/wlan-throughput": (
         "WLAN throughput / DAU SCPI",
         "Data Application Unit IP throughput / iPerf / ping",

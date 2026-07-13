@@ -12,6 +12,7 @@ from ..exceptions import (
 from ..models.cmw_types import (
     ACLRResult,
     ARBRepetition,
+    BERResult,
     CellConfig,
     EblResult,
     EVMResult,
@@ -1414,6 +1415,147 @@ class CMW500Driver:
         await self._scpi.send("SYSTem:GENerator:ALL:OFF")
         await self._scpi.send("SYSTem:MEASurement:ALL:OFF")
         self._generator_on = False
+
+    # =========================================================================
+    # GSM / GPRS signaling
+    #
+    # App-note-derived (options CMW-KS200/KM200); bench-validate. Root GSM:SIGN1.
+    # =========================================================================
+
+    async def gsm_sig_set_band(self, band: str) -> None:
+        """Set the GSM operating band (CMW token, e.g. G085/G09/G18/G19)."""
+        sanitize_scpi_param(band)
+        await self._scpi.send(f"CONFigure:GSM:SIGN1:BAND {band}")
+
+    async def gsm_sig_set_arfcn(self, arfcn: int, channel: str = "TCH") -> None:
+        """Set the ARFCN for the TCH or BCH channel."""
+        ch = channel.strip().upper()
+        if ch not in ("TCH", "BCH"):
+            raise ValueError("channel must be 'TCH' or 'BCH'")
+        await self._scpi.send(f"CONFigure:GSM:SIGN1:RFSettings:CHANnel:{ch} {int(arfcn)}")
+
+    async def gsm_sig_set_level(self, level_dbm: float) -> None:
+        """Set the GSM cell RF output level (dBm)."""
+        self._safety.validate_dl_level(level_dbm)
+        await self._scpi.send(f"CONFigure:GSM:SIGN1:RFSettings:LEVel {level_dbm}")
+
+    async def gsm_sig_set_state(self, on: bool) -> None:
+        """Switch the GSM signaling cell ON/OFF."""
+        await self._scpi.send(f"SOURce:GSM:SIGN1:STATe {'ON' if on else 'OFF'}")
+        self._cell_on = on
+
+    async def gsm_sig_state_all(self) -> str:
+        """Query combined GSM cell state (e.g. 'ON,ADJ')."""
+        return await self._scpi.query("SOURce:GSM:SIGN1:STATe:ALL?")
+
+    async def gsm_sig_connection_state(self) -> str:
+        """Query the circuit-switched connection state."""
+        return await self._scpi.query("SENSe:GSM:SIGN1:CSWitched:STATe?")
+
+    async def gsm_meas_configure(self, stat_count: int = 10) -> None:
+        """Configure the GSM multi-evaluation TX measurement."""
+        await self._scpi.send(f"CONFigure:GSM:MEAS1:MEValuation:SCOunt {int(stat_count)}")
+
+    async def gsm_meas_init(self) -> None:
+        """Start the GSM multi-evaluation TX measurement."""
+        await self._scpi.send("INITiate:GSM:MEAS1:MEValuation")
+
+    async def gsm_meas_fetch_power(self) -> PowerResult:
+        """Fetch GSM burst TX power."""
+        result = PowerResult()
+        try:
+            response = await self._scpi.query("FETCh:GSM:MEAS1:MEValuation:POWer:CURRent?")
+            parts = response.split(",")
+            if len(parts) >= 2:
+                result.reliability = parts[0].strip()
+                result.current_dbm = _parse_float(parts[1], "gsm_power")
+            if len(parts) >= 3:
+                result.average_dbm = _parse_float(parts[2], "gsm_avg_power")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch GSM power: {e}")
+        return result
+
+    async def gsm_sig_fetch_ber(self) -> BERResult:
+        """Fetch GSM RX BER (reliability + BER%)."""
+        result = BERResult()
+        try:
+            response = await self._scpi.query("FETCh:GSM:SIGN1:BER?")
+            parts = response.split(",")
+            if parts:
+                result.reliability = parts[0].strip()
+            if len(parts) >= 2:
+                result.ber = _parse_float(parts[1], "gsm_ber")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch GSM BER: {e}")
+        return result
+
+    # =========================================================================
+    # WCDMA / UMTS signaling
+    #
+    # App-note-derived (options CMW-KS400/KM400); bench-validate. Root WCDMa:SIGN1.
+    # =========================================================================
+
+    async def wcdma_sig_set_band(self, band: str) -> None:
+        """Set the WCDMA operating band (CMW token, e.g. OB1)."""
+        sanitize_scpi_param(band)
+        await self._scpi.send(f"CONFigure:WCDMa:SIGN1:CARRier:BAND {band}")
+
+    async def wcdma_sig_set_dl_channel(self, channel: int) -> None:
+        """Set the WCDMA downlink UARFCN."""
+        await self._scpi.send(f"CONFigure:WCDMa:SIGN1:CARRier:DL:CHANnel {int(channel)}")
+
+    async def wcdma_sig_set_level(self, level_dbm: float) -> None:
+        """Set the WCDMA cell RF output level (dBm)."""
+        self._safety.validate_dl_level(level_dbm)
+        await self._scpi.send(f"CONFigure:WCDMa:SIGN1:DOWNlink:LEVel {level_dbm}")
+
+    async def wcdma_sig_set_state(self, on: bool) -> None:
+        """Switch the WCDMA signaling cell ON/OFF."""
+        await self._scpi.send(f"SOURce:WCDMa:SIGN1:CELL:STATe {'ON' if on else 'OFF'}")
+        self._cell_on = on
+
+    async def wcdma_sig_state_all(self) -> str:
+        """Query combined WCDMA cell state (e.g. 'ON,ADJ')."""
+        return await self._scpi.query("SOURce:WCDMa:SIGN1:CELL:STATe:ALL?")
+
+    async def wcdma_sig_connection_state(self) -> str:
+        """Query the WCDMA RRC/connection state."""
+        return await self._scpi.query("SENSe:WCDMa:SIGN1:CONNection:STATe?")
+
+    async def wcdma_meas_configure(self, stat_count: int = 10) -> None:
+        """Configure the WCDMA multi-evaluation TX measurement."""
+        await self._scpi.send(f"CONFigure:WCDMa:MEAS1:MEValuation:SCOunt {int(stat_count)}")
+
+    async def wcdma_meas_init(self) -> None:
+        """Start the WCDMA multi-evaluation TX measurement."""
+        await self._scpi.send("INITiate:WCDMa:MEAS1:MEValuation")
+
+    async def wcdma_meas_fetch_power(self) -> PowerResult:
+        """Fetch WCDMA UE TX power."""
+        result = PowerResult()
+        try:
+            response = await self._scpi.query("FETCh:WCDMa:MEAS1:MEValuation:POWer:CURRent?")
+            parts = response.split(",")
+            if len(parts) >= 2:
+                result.reliability = parts[0].strip()
+                result.current_dbm = _parse_float(parts[1], "wcdma_power")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch WCDMA power: {e}")
+        return result
+
+    async def wcdma_sig_fetch_ber(self) -> BERResult:
+        """Fetch WCDMA RX BER (reliability + BER%)."""
+        result = BERResult()
+        try:
+            response = await self._scpi.query("FETCh:WCDMa:SIGN1:BER?")
+            parts = response.split(",")
+            if parts:
+                result.reliability = parts[0].strip()
+            if len(parts) >= 2:
+                result.ber = _parse_float(parts[1], "wcdma_ber")
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch WCDMA BER: {e}")
+        return result
 
     # =========================================================================
     # Data Application Unit (DAU) — IP throughput / iPerf / ping
