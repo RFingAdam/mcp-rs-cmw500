@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rs-cmw500-mcp"
-version = "0.4.0"
+version = "0.5.0"
 description = "MCP server for Rohde & Schwarz CMW500 Wideband Radio Communication Tester via TCP/IP SCPI"
 readme = "README.md"
 license = "AGPL-3.0-or-later"

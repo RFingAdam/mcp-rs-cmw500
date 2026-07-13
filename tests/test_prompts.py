@@ -8,6 +8,7 @@ from rs_cmw500_mcp import prompts
 def test_list_prompts():
     names = {p.name for p in prompts.list_prompts()}
     assert names == {
+        "bench_bringup",
         "lte_ble_desense_sweep",
         "lte_wifi_coexistence_throughput",
         "rx_sensitivity_search",

@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-07-13
+
+### Added
+
+- **Per-unit bench profile** (`profile.py`, `tools/profile_tools.py`) — one JSON
+  per unit capturing connection, safety limits, RF routing map, external
+  attenuation, and expected licenses. Auto-loaded via `CMW_PROFILE_FILE`; tools
+  consult it for defaults only when an arg is omitted (explicit wins). Tools
+  `cmw_profile_load/show/save/list/apply` + `cmw://profile` resource.
+  `cmw_profile_apply` pushes only well-grounded GPRF routing/attenuation;
+  signaling routing is returned as intent.
+- **Test-plan + reporting engine** (`testplan/`, `tools/testplan_tools.py`) —
+  ordered steps that invoke any registered tool (domain-agnostic via the
+  registry), with pass/fail limits on dotted result paths, `${ctx.key}` chaining,
+  setup/main/teardown roles, and abort-on-fail (teardown still runs). Resumable
+  run + Markdown / self-contained HTML / CSV reports (no new deps). Tools
+  `cmw_testplan_define/step/run/result/report/save/load/list`.
+- **New first-class domains**: GSM/GPRS signaling (`tools/gsm_signaling.py`),
+  WCDMA/UMTS signaling (`tools/wcdma_signaling.py`), and WLAN throughput / DAU
+  (`tools/wlan_throughput.py`: IP throughput, iPerf, ping) — the Wi-Fi victim
+  metric for LTE+Wi-Fi coex. New `ThroughputResult`. GSM/WCDMA and iPerf/ping
+  are app-note-derived; the DAU THRoughput commands are well-grounded.
+- **Bench validation** (`licensing.py`, `tools/selftest.py`) — `cmw_selftest`
+  identifies the unit, lists options, and runs a read-only smoke per licensed
+  domain; `bench_bringup` prompt; hardware integration tests gated by
+  `CMW_TEST_HOST`.
+- SCPI reference resources for GSM/WCDMA/WLAN-throughput.
+
+### Changed
+
+- Tool count **102 → 131**; tests **457 → ~510**. New config: `CMW_PROFILE_FILE`,
+  `CMW_PROFILE_DIR`, `CMW_TESTPLAN_DIR`, `CMW_REPORT_DIR`.
+- Cleared all pre-existing `mypy --strict` errors (annotations across templates,
+  state, limits, scpi_socket/driver context managers; scoped override for the
+  untyped MCP-SDK decorators in `server.py`).
+- Version bumped to 0.5.0.
+
 ## [0.4.0] — 2026-07-13
 
 ### Added

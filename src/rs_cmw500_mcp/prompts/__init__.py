@@ -129,8 +129,30 @@ This documents the sub-GHz coex path; the victim measurement is off-instrument.
 {_SAFETY}"""
 
 
+def _bench_bringup(a: dict[str, Any]) -> str:
+    return f"""Goal: bring up and validate a CMW500 bench before running test plans.
+
+Suggested sequence:
+1. `cmw_profile_load` (filename {a.get("profile", "your-unit")}) or `cmw_profile_show`
+   to load this unit's connection/routing/attenuation/expected-licenses.
+2. `cmw_connect` then `cmw_selftest` — confirms *IDN?, installed options, and which
+   licensed domains are live (read-only; nothing switched on). Check
+   expected_vs_actual against the profile.
+3. `cmw_coex_validate_routing` (uses the profile's routing map) to catch a shared
+   connector before any coex run.
+4. `cmw_profile_apply` to push GPRF routing/attenuation; apply signaling routing on
+   the instrument/GUI per the returned planned_scpi.
+5. Optionally define a small read-only smoke `cmw_testplan_define` (e.g. cmw_identify
+   + cmw_query_options + cmw_get_status) and `cmw_testplan_report` to Markdown.
+
+Now the bench is ready for measurement test plans.
+
+{_SAFETY}"""
+
+
 _BUILDERS = {
     "lte_ble_desense_sweep": _lte_ble_desense,
+    "bench_bringup": _bench_bringup,
     "lte_wifi_coexistence_throughput": _lte_wifi_coex,
     "rx_sensitivity_search": _rx_sensitivity,
     "imd_hit_analysis": _imd_analysis,
@@ -138,6 +160,11 @@ _BUILDERS = {
 }
 
 _PROMPTS = [
+    Prompt(
+        name="bench_bringup",
+        description="Guide CMW500 bench bring-up: profile load, selftest, routing, apply.",
+        arguments=[_arg("profile", "Bench profile filename to load (optional)")],
+    ),
     Prompt(
         name="lte_ble_desense_sweep",
         description="Guide an LTE->BLE receiver-desense coexistence sweep (aggressor x victim).",

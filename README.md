@@ -11,7 +11,7 @@
 [![eng-mcp-suite](https://img.shields.io/badge/eng--mcp--suite-member-22D3EE.svg)](https://github.com/RFingAdam/eng-mcp-suite)
 
 **Drive the Rohde & Schwarz CMW500 Wideband Radio Communication Tester from any MCP-compatible AI client.**
-**Direct TCP/IP SCPI (port 5025) — 102 tools across LTE signaling + RX, WLAN, Bluetooth/BLE (incl. signaling), GPRF, and coexistence, plus a SCPI-reference resource set and guided coex prompts. No CMWrun dependency.**
+**Direct TCP/IP SCPI (port 5025) — 131 tools spanning LTE/GSM/WCDMA signaling, LTE RX, WLAN (incl. signaling + throughput), Bluetooth/BLE, GPRF, and coexistence — plus per-unit bench profiles, a test-plan + reporting engine, SCPI-reference resources, and guided prompts. No CMWrun dependency.**
 
 [Quick start](#quick-start) ·
 [Tools](#tools) ·
@@ -164,7 +164,7 @@ rs-cmw500-mcp        # MCP server over stdio
 
 ## Tools
 
-102 MCP tools, grouped:
+131 MCP tools, grouped:
 
 | Group | Count | Examples |
 | ----- | ----- | -------- |
@@ -178,9 +178,14 @@ rs-cmw500-mcp        # MCP server over stdio
 | **WLAN Signaling (AP)** | 4 | `cmw_wlan_sig_configure_ap`, `cmw_wlan_sig_ap_on/off`, `cmw_wlan_sig_get_state` |
 | **Bluetooth/BLE Non-Signaling** | 11 | `cmw_bt_configure`, `cmw_bt_set_technology/ble_mode/packet_type`, `cmw_bt_fetch_*` |
 | **BLE Signaling (PER)** | 5 | `cmw_ble_sig_configure`, `cmw_ble_sig_connect/detach`, `cmw_ble_sig_measure_per`, `cmw_ble_sig_sensitivity` |
+| **GSM Signaling** | 6 | `cmw_gsm_sig_configure`, `cmw_gsm_sig_cell_on/off`, `cmw_gsm_sig_get_state`, `cmw_gsm_meas_tx`, `cmw_gsm_sig_ber` |
+| **WCDMA Signaling** | 6 | `cmw_wcdma_sig_configure`, `cmw_wcdma_sig_cell_on/off`, `cmw_wcdma_sig_get_state`, `cmw_wcdma_meas_tx`, `cmw_wcdma_sig_ber` |
+| **WLAN Throughput (DAU)** | 3 | `cmw_data_throughput`, `cmw_data_iperf_run`, `cmw_data_ping` |
 | **Coexistence** | 5 | `cmw_coex_plan`, `cmw_coex_step`, `cmw_coex_result`, `cmw_coex_measure_point`, `cmw_coex_validate_routing` |
 | **RF Planner (IMD)** | 2 | `cmw_imd_analyze`, `cmw_imd_batch` |
-| **SCPI / System** | 6 | `cmw_scpi_send`, `cmw_scpi_query`, `cmw_scpi_query_opc`, `cmw_system_error`, `cmw_reset`, `cmw_preset` |
+| **Bench Profile** | 5 | `cmw_profile_load`, `cmw_profile_show`, `cmw_profile_save`, `cmw_profile_list`, `cmw_profile_apply` |
+| **Test Plan / Reporting** | 8 | `cmw_testplan_define`, `cmw_testplan_step/run`, `cmw_testplan_result`, `cmw_testplan_report`, `cmw_testplan_save/load/list` |
+| **SCPI / System** | 7 | `cmw_scpi_send`, `cmw_scpi_query`, `cmw_scpi_query_opc`, `cmw_system_error`, `cmw_selftest`, `cmw_reset`, `cmw_preset` |
 | **Templates** | 3 | `cmw_list_templates`, `cmw_load_template`, `cmw_apply_template` |
 | **State** | 3 | `cmw_save_state`, `cmw_load_state`, `cmw_get_full_state` |
 | **Limits** | 4 | `cmw_define_limit`, `cmw_check_limits`, `cmw_list_limits`, `cmw_clear_limits` |
@@ -194,14 +199,15 @@ Available templates: `lte_tx_power`, `gprf_power`, `nonsig_rx`, `wlan_tx`,
 Beyond tools, the server publishes MCP **resources** and **prompts**:
 
 - **Resources** (`cmw://…`): a curated SCPI quick-reference per subsystem
-  (`cmw://scpi/lte-signaling`, `…/bluetooth-signaling`, `…/wlan-signaling`,
+  (`cmw://scpi/{lte,gsm,wcdma,bluetooth,wlan}-signaling`, `…/wlan-throughput`,
   `…/gprf`, `…/routing`, `…/system`), a reliability-code table, a JSON band-plan
-  dump, overridable band presets, and live `cmw://capabilities` (installed
-  options queried from the instrument). This lets an agent construct correct
-  SCPI for any licensed subsystem via the raw-SCPI tools.
-- **Prompts**: `lte_ble_desense_sweep`, `lte_wifi_coexistence_throughput`,
-  `rx_sensitivity_search`, `imd_hit_analysis`, `subghz_aggressor_sweep` — each
-  states the exact tool-call sequence, neutral defaults, and safety reminders.
+  dump, overridable band presets, the active bench profile (`cmw://profile`), and
+  live `cmw://capabilities` (installed options). This lets an agent construct
+  correct SCPI for any licensed subsystem via the raw-SCPI tools.
+- **Prompts**: `bench_bringup`, `lte_ble_desense_sweep`,
+  `lte_wifi_coexistence_throughput`, `rx_sensitivity_search`, `imd_hit_analysis`,
+  `subghz_aggressor_sweep` — each states the exact tool-call sequence, neutral
+  defaults, and safety reminders.
 
 ### Coexistence
 
@@ -218,6 +224,22 @@ as a **victim**:
 - **IMD planning** — `cmw_imd_analyze` / `cmw_imd_batch` predict which
   harmonic/intermod products land in a victim band (GNSS, Wi-Fi, HaLow, LTE, …)
   before you spend bench time.
+
+### Bench profiles, test plans & reporting
+
+- **Per-unit bench profile** — one JSON (via `CMW_PROFILE_FILE` or
+  `cmw_profile_load`) captures a unit's connection, safety limits, RF routing map,
+  external attenuation, and expected licenses. Tools consult it for defaults only
+  when an argument is omitted (explicit always wins), so it's drop-in per unit.
+- **Test-plan + reporting engine** — `cmw_testplan_define` builds an ordered plan
+  whose steps invoke *any* registered tool, with pass/fail limits on dotted result
+  paths and `${ctx.key}` chaining between steps; `cmw_testplan_step`/`run` execute
+  it resumably; `cmw_testplan_report` renders Markdown / self-contained HTML / CSV.
+  So an agent can author → configure → measure → check → report across any domain.
+- **Bench validation** — `cmw_selftest` identifies the unit, lists installed
+  options, and runs a read-only smoke per licensed domain; the `bench_bringup`
+  prompt walks the whole setup. Hardware integration checks live behind
+  `CMW_TEST_HOST` (`-m integration`).
 
 ---
 

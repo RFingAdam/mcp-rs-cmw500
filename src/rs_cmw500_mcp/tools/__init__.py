@@ -31,6 +31,7 @@ from . import (  # noqa: F401, E402
     profile_tools,
     rf_planner,
     scpi,
+    selftest,
     state_tools,
     system,
     templates_tools,
