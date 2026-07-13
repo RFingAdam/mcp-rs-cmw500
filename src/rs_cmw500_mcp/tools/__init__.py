@@ -33,6 +33,7 @@ from . import (  # noqa: F401, E402
     state_tools,
     system,
     templates_tools,
+    testplan_tools,
     wlan,
     wlan_signaling,
 )
