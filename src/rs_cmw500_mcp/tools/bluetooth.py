@@ -135,9 +135,9 @@ _HOST_PORT_PROPS = {
 }
 
 
-def _props(*extra_dicts: dict) -> dict:
+def _props(*extra_dicts: dict[str, Any]) -> dict[str, Any]:
     """Merge property dicts."""
-    merged: dict = {}
+    merged: dict[str, Any] = {}
     for d in extra_dicts:
         merged.update(d)
     merged.update(_MEAS_INSTANCE_PROP)

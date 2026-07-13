@@ -44,7 +44,7 @@ class LimitSegment:
     unit: str = ""
     name: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate segment configuration."""
         if self.max_value is None and self.min_value is None:
             raise ValueError("LimitSegment must have at least max_value or min_value specified")
@@ -235,7 +235,7 @@ class LimitManager:
     checking of measurements against multiple limits.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize limit manager."""
         self._limits: dict[str, LimitLine] = {}
 

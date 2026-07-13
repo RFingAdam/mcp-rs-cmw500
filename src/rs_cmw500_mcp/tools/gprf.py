@@ -137,10 +137,17 @@ async def _handle_meas_fetch_power(args: dict[str, Any]) -> CallToolResult:
     return _format_result(result.to_dict())
 
 
+async def _handle_meas_trigger_spectrum(args: dict[str, Any]) -> CallToolResult:
+    """Initiate the GPRF spectrum measurement."""
+    cmw = await _get_cmw(args.get("host"), args.get("port"))
+    await cmw.meas_trigger_spectrum()
+    return _format_result({"status": "ok", "measurement": "gprf_spectrum_triggered"})
+
+
 async def _handle_meas_fetch_spectrum(args: dict[str, Any]) -> CallToolResult:
     """Fetch spectrum results."""
     cmw = await _get_cmw(args.get("host"), args.get("port"))
-    result = await cmw.meas_fetch_spectrum()
+    result = await cmw.meas_fetch_spectrum(args.get("statistic", "AVERage"))
     return _format_result(result)
 
 
@@ -420,11 +427,36 @@ registry.register(
 
 registry.register(
     Tool(
-        name="cmw_meas_fetch_spectrum",
-        description="Fetch GPRF spectrum measurement results",
+        name="cmw_meas_trigger_spectrum",
+        description="Initiate the GPRF spectrum measurement (configure first, then fetch)",
         inputSchema={
             "type": "object",
             "properties": {
+                "host": {"type": "string"},
+                "port": {"type": "integer"},
+            },
+        },
+    ),
+    _handle_meas_trigger_spectrum,
+)
+
+registry.register(
+    Tool(
+        name="cmw_meas_fetch_spectrum",
+        description=(
+            "Fetch the GPRF spectrum power trace (dBm) across the configured span. "
+            "Returns reliability + trace for the chosen statistic. Spectrum result "
+            "nodes are firmware-dependent; validate on hardware."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "statistic": {
+                    "type": "string",
+                    "enum": ["CURRent", "AVERage", "MAXimum", "MINimum"],
+                    "description": "Trace statistic to fetch (default AVERage)",
+                    "default": "AVERage",
+                },
                 "host": {"type": "string"},
                 "port": {"type": "integer"},
             },

@@ -82,3 +82,12 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
+
+# The MCP low-level Server decorators (@server.list_tools() etc.) are untyped,
+# which under --strict flags the thin handler wrappers in server.py. Relax only
+# the decorator-related checks for that one wrapper module.
+[[tool.mypy.overrides]]
+module = "rs_cmw500_mcp.server"
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
+warn_return_any = false

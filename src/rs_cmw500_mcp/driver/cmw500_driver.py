@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from enum import Enum
+from types import TracebackType
 from typing import Any
 
 from ..exceptions import (
@@ -442,15 +443,48 @@ class CMW500Driver:
 
         return result
 
-    async def meas_fetch_spectrum(self) -> dict[str, Any]:
-        """
-        Fetch spectrum measurement results.
+    async def meas_trigger_spectrum(self) -> None:
+        """Initiate the GPRF spectrum measurement."""
+        await self._scpi.send("INITiate:GPRF:MEASurement1:SPECtrum")
 
-        Returns:
-            Dictionary with spectrum data
+    async def meas_fetch_spectrum(self, statistic: str = "AVERage") -> dict[str, Any]:
+        """Fetch the GPRF spectrum power trace across the configured span.
+
+        Configure via ``meas_configure_spectrum`` and start via
+        ``meas_trigger_spectrum`` first. Returns the reliability indicator plus
+        the power trace (dBm) for the chosen statistic.
+
+        NOTE: the exact spectrum result node is firmware/option dependent (some
+        CMW builds expose the FFT spectrum under ``FFTSanalyzer`` rather than
+        ``SPECtrum``). This uses the same subsystem as the configure command; on
+        a mismatch it returns a diagnostic ``error`` field rather than raising,
+        and the raw path (see the ``cmw://scpi/gprf`` resource + ``cmw_scpi_query``)
+        remains available. Validate on hardware.
         """
-        # CMW500 spectrum results depend on measurement configuration
-        return {"status": "spectrum measurement not yet configured"}
+        node_map = {
+            "CURRENT": "CURRent",
+            "AVERAGE": "AVERage",
+            "MAXIMUM": "MAXimum",
+            "MINIMUM": "MINimum",
+        }
+        node = node_map.get(statistic.strip().upper(), "AVERage")
+        result: dict[str, Any] = {"statistic": node}
+        try:
+            raw = await self._scpi.query(f"FETCh:GPRF:MEASurement1:SPECtrum:{node}?")
+            parts = [p.strip() for p in raw.split(",")]
+            result["reliability"] = parts[0] if parts else ""
+            values: list[float] = []
+            for p in parts[1:]:
+                try:
+                    values.append(float(p))
+                except ValueError:
+                    continue
+            result["power_dbm"] = values
+            result["point_count"] = len(values)
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch spectrum ({node}): {e}")
+            result["error"] = str(e)
+        return result
 
     # =========================================================================
     # Signal Path / Route
@@ -1389,7 +1423,12 @@ class CMW500Driver:
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Async context manager exit."""
         # Safety: turn off generator on exit
         if self._generator_on:

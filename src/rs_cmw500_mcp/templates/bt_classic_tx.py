@@ -1,8 +1,12 @@
 """Bluetooth Classic TX measurement template for CMW500."""
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .base import MeasurementTemplate
+
+if TYPE_CHECKING:
+    from ..driver.cmw500_driver import CMW500Driver
 
 
 @dataclass
@@ -18,7 +22,7 @@ class BTClassicTxTemplate(MeasurementTemplate):
     description: str = "Bluetooth Classic DH1 TX power and modulation measurement"
     technology: str = "Bluetooth"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default parameters if not provided."""
         if not self.parameters:
             self.parameters = {
@@ -56,7 +60,7 @@ class BTClassicTxTemplate(MeasurementTemplate):
             },
         )
 
-    async def apply(self, cmw) -> None:
+    async def apply(self, cmw: "CMW500Driver") -> None:
         """Apply BT Classic TX measurement configuration to CMW500.
 
         Args:

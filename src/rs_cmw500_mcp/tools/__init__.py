@@ -8,7 +8,7 @@ remains backward-compatible with server.py.
 import logging
 from typing import Any
 
-from mcp.types import CallToolResult, TextContent
+from mcp.types import CallToolResult, TextContent, Tool
 
 from ..exceptions import CMW500Error
 from .registry import registry
@@ -37,7 +37,7 @@ from . import (  # noqa: F401, E402
 )
 
 
-def get_tools():
+def get_tools() -> list[Tool]:
     """Get all MCP tool definitions.
 
     Returns the same list format as the original tools.py for

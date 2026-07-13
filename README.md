@@ -11,7 +11,7 @@
 [![eng-mcp-suite](https://img.shields.io/badge/eng--mcp--suite-member-22D3EE.svg)](https://github.com/RFingAdam/eng-mcp-suite)
 
 **Drive the Rohde & Schwarz CMW500 Wideband Radio Communication Tester from any MCP-compatible AI client.**
-**Direct TCP/IP SCPI (port 5025) — 101 tools across LTE signaling + RX, WLAN, Bluetooth/BLE (incl. signaling), GPRF, and coexistence, plus a SCPI-reference resource set and guided coex prompts. No CMWrun dependency.**
+**Direct TCP/IP SCPI (port 5025) — 102 tools across LTE signaling + RX, WLAN, Bluetooth/BLE (incl. signaling), GPRF, and coexistence, plus a SCPI-reference resource set and guided coex prompts. No CMWrun dependency.**
 
 [Quick start](#quick-start) ·
 [Tools](#tools) ·
@@ -164,13 +164,13 @@ rs-cmw500-mcp        # MCP server over stdio
 
 ## Tools
 
-101 MCP tools, grouped:
+102 MCP tools, grouped:
 
 | Group | Count | Examples |
 | ----- | ----- | -------- |
 | **Connection** | 6 | `cmw_discover`, `cmw_connect`, `cmw_identify`, `cmw_get_status`, `cmw_query_options` |
 | **GPRF Generator** | 7 | `cmw_gen_set_frequency`, `cmw_gen_set_level`, `cmw_gen_output_on/off`, `cmw_gen_load_arb`, `cmw_gen_configure_arb` |
-| **GPRF Analyzer** | 10 | `cmw_meas_configure_power`, `cmw_meas_configure_spectrum`, `cmw_meas_trigger`, `cmw_meas_fetch_power` |
+| **GPRF Analyzer** | 11 | `cmw_meas_configure_power`, `cmw_meas_configure_spectrum`, `cmw_meas_trigger(_spectrum)`, `cmw_meas_fetch_power/spectrum` |
 | **GPRF Signal Path** | 4 | `cmw_set_signal_path`, `cmw_get_signal_path`, `cmw_set_port`, `cmw_system_all_off` |
 | **LTE Signaling** | 16 | `cmw_lte_configure_cell`, `cmw_lte_cell_on/off`, `cmw_lte_configure_nas/bearer/cdrx`, `cmw_lte_meas_*` |
 | **LTE RX / Sensitivity** | 4 | `cmw_lte_rx_configure`, `cmw_lte_attach_wait`, `cmw_lte_rx_measure_bler`, `cmw_lte_rx_sensitivity` |
