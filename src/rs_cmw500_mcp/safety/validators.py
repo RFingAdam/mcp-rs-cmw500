@@ -68,6 +68,11 @@ def validate_safe_path(user_path: str | Path, base_dir: str | Path) -> Path:
     Raises:
         ValueError: If the path escapes the base directory or is otherwise unsafe
     """
+    # Reject null bytes explicitly. On some platforms Path construction/resolution
+    # tolerates embedded NULs instead of raising, so guard before touching the FS.
+    if "\x00" in str(user_path):
+        raise ValueError(f"Path contains null bytes: {user_path!r}")
+
     base = Path(base_dir).resolve()
     resolved = (base / Path(user_path)).resolve()
 

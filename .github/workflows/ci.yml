@@ -20,6 +20,8 @@ jobs:
         run: ruff check src/ tests/
       - name: Ruff format check
         run: ruff format --check src/ tests/
+      - name: Scrub check (no customer/project identifiers)
+        run: python scripts/scrub_check.py
 
   test:
     runs-on: ubuntu-latest

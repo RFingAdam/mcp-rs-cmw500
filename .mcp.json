@@ -2,7 +2,11 @@
   "mcpServers": {
     "rs-cmw500": {
       "command": "uv",
-      "args": ["--directory", "/home/swamp/projects/github/mcp-rs-cmw500", "run", "rs-cmw500-mcp"]
+      "args": ["--directory", "/absolute/path/to/mcp-rs-cmw500", "run", "rs-cmw500-mcp"],
+      "env": {
+        "CMW_DEFAULT_HOST": "127.0.0.1",
+        "CMW_DEFAULT_PORT": "5025"
+      }
     }
   }
 }

@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-07-13
+
+### Added
+
+- **LTE receiver sensitivity (Extended BLER)** — cell attach lifecycle, single
+  EBL measurements, and a coarse+fine sensitivity search
+  (`cmw_lte_rx_configure`, `cmw_lte_attach_wait`, `cmw_lte_rx_measure_bler`,
+  `cmw_lte_rx_sensitivity`).
+- **BLE signaling PER** — a signaling domain distinct from the existing
+  non-signaling measurement block: connect/detach, single PER reads, and a
+  PER sensitivity search (`cmw_ble_sig_*`).
+- **WLAN signaling (AP emulation)** — for native LTE+Wi-Fi coexistence
+  (`cmw_wlan_sig_configure_ap`, `cmw_wlan_sig_ap_on/off`,
+  `cmw_wlan_sig_get_state`). License-gated; SCPI derived from R&S app notes and
+  flagged for bench validation.
+- **Coexistence orchestration** — a resumable LTE(aggressor)↔BLE(victim) desense
+  sweep with a rows×columns sensitivity matrix, plus a routing-collision guard
+  (`cmw_coex_plan/step/result/measure_point`, `cmw_coex_validate_routing`).
+- **IMD / coexistence planner** — pure-computation harmonic + intermodulation
+  analysis into a victim band with physical-radio constraint rules
+  (`cmw_imd_analyze`, `cmw_imd_batch`), backed by a standard band-plan module
+  (EARFCN tables, band edges incl. GNSS/Wi-Fi/HaLow, BLE channel math).
+- **System / SCPI-hygiene tools** — `cmw_system_error` (drain `SYSTem:ERRor?`)
+  and `cmw_scpi_query_opc` (OPC-synced raw command); optional
+  `CMW_AUTO_ERROR_CHECK`.
+- **MCP resources** — a curated per-subsystem SCPI reference, a reliability-code
+  table, a JSON band-plan dump, overridable band presets, and dynamic
+  `cmw://capabilities` (live installed options).
+- **MCP prompts** — guided coex/RX workflows: `lte_ble_desense_sweep`,
+  `lte_wifi_coexistence_throughput`, `rx_sensitivity_search`,
+  `imd_hit_analysis`, `subghz_aggressor_sweep`.
+- Shared, hardware-agnostic coarse+fine threshold-search primitive
+  (`driver/search.py`) reused by LTE-BLER and BLE-PER.
+- A `MockSCPISocket` test double for hardware-free SCPI-string / parser tests.
+- CI scrub-check guarding against customer/project identifiers.
+
+### Changed
+
+- Tool count increased from **79 to 101**; test count from 373 to **453**.
+- Raw SCPI now **disabled by default** (`allow_raw_scpi=False`) — the shipped
+  code default now matches the documented secure posture.
+- Corrected a UL-frequency mapping bug carried in from the source scripts
+  (paired UL now uses the DL channel offset per 3GPP TS 36.101).
+- `validate_safe_path` now explicitly rejects null bytes (cross-platform).
+- Fixed the version-string mismatch, the hard-coded developer path in
+  `.mcp.json`, and the inaccurate direct-driver example in the README.
+- Version bumped to 0.4.0.
+
 ## [0.3.0] — 2026-05-13
 
 ### Changed

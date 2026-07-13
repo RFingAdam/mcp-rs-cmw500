@@ -19,15 +19,21 @@ logger = logging.getLogger(__name__)
 # Order doesn't matter since each module registers independently.
 from . import (  # noqa: F401, E402
     bluetooth,
+    bluetooth_signaling,
+    coex,
     connection,
     gprf,
     gprf_advanced,
     limits_tools,
     lte,
+    lte_rx,
+    rf_planner,
     scpi,
     state_tools,
+    system,
     templates_tools,
     wlan,
+    wlan_signaling,
 )
 
 

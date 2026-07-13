@@ -353,6 +353,89 @@ class BLERResult:
 
 
 @dataclass
+class EblResult:
+    """LTE Extended BLER (EBL) intermediate result.
+
+    reliability: CMW reliability indicator (0 = OK, 19 = call dropped / not
+    attached). bler_percent is None when the response could not be parsed.
+    """
+
+    reliability: str = ""
+    bler_percent: float | None = None
+    raw: str = ""
+
+    @property
+    def dropped(self) -> bool:
+        """True if the call dropped (reliability 19)."""
+        return self.reliability.strip() == "19"
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {"reliability": self.reliability, "dropped": self.dropped}
+        if self.bler_percent is not None:
+            result["bler_percent"] = self.bler_percent
+        if self.raw:
+            result["raw"] = self.raw
+        return result
+
+
+@dataclass
+class PerResult:
+    """BLE signaling Packet Error Rate (PER) result.
+
+    reliability 0 indicates a valid measurement; per_percent is None when the
+    measurement was invalid or the link dropped.
+    """
+
+    reliability: str = ""
+    per_percent: float | None = None
+    raw: str = ""
+
+    @property
+    def valid(self) -> bool:
+        """True if the measurement is valid (reliability 0)."""
+        return self.reliability.strip() == "0" and self.per_percent is not None
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {"reliability": self.reliability, "valid": self.valid}
+        if self.per_percent is not None:
+            result["per_percent"] = self.per_percent
+        if self.raw:
+            result["raw"] = self.raw
+        return result
+
+
+@dataclass
+class RxSensitivityResult:
+    """Receiver-sensitivity search outcome for one condition (LTE or BLE)."""
+
+    technology: str = ""
+    status: str = ""  # ok | no_pass | drop
+    sensitivity_dbm: float | None = None
+    target_pct: float = 10.0
+    channel: int | None = None
+    frequency_mhz: float | None = None
+    points_measured: int = 0
+    trace: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "technology": self.technology,
+            "status": self.status,
+            "target_pct": self.target_pct,
+            "points_measured": self.points_measured,
+        }
+        if self.sensitivity_dbm is not None:
+            result["sensitivity_dbm"] = self.sensitivity_dbm
+        if self.channel is not None:
+            result["channel"] = self.channel
+        if self.frequency_mhz is not None:
+            result["frequency_mhz"] = self.frequency_mhz
+        if self.trace:
+            result["trace"] = self.trace
+        return result
+
+
+@dataclass
 class CellState:
     """LTE cell state information."""
 

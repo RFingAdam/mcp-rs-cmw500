@@ -5,9 +5,12 @@ import logging
 from typing import Any
 
 from mcp.server import Server
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.stdio import stdio_server
-from mcp.types import CallToolResult, Tool
+from mcp.types import CallToolResult, GetPromptResult, Prompt, Resource, Tool
 
+from . import prompts as prompts_mod
+from . import resources as resources_mod
 from .config import get_settings
 from .tools import get_tools, handle_tool
 
@@ -32,6 +35,27 @@ def create_server() -> Server:
         """
         logger.debug(f"Tool called: {name} with args: {arguments}")
         return await handle_tool(name, arguments)
+
+    @server.list_resources()
+    async def list_resources() -> list[Resource]:
+        """Return the curated SCPI reference + dynamic capability resources."""
+        return resources_mod.list_resources()
+
+    @server.read_resource()
+    async def read_resource(uri: Any) -> list[ReadResourceContents]:
+        """Read a cmw:// resource by URI."""
+        content, mime = await resources_mod.read_resource(str(uri))
+        return [ReadResourceContents(content=content, mime_type=mime)]
+
+    @server.list_prompts()
+    async def list_prompts() -> list[Prompt]:
+        """Return the guided coexistence / RX workflow prompts."""
+        return prompts_mod.list_prompts()
+
+    @server.get_prompt()
+    async def get_prompt(name: str, arguments: dict[str, str] | None = None) -> GetPromptResult:
+        """Render a guided prompt with the supplied arguments."""
+        return prompts_mod.get_prompt(name, arguments)
 
     return server
 
