@@ -1,8 +1,12 @@
 """Non-signaling RX sensitivity test template."""
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .base import MeasurementTemplate
+
+if TYPE_CHECKING:
+    from ..driver.cmw500_driver import CMW500Driver
 
 
 @dataclass
@@ -19,7 +23,7 @@ class NonSignalingRxTemplate(MeasurementTemplate):
     description: str = "BER/sensitivity test with generator + analyzer configuration"
     technology: str = "GPRF"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default parameters if not provided."""
         if not self.parameters:
             self.parameters = {
@@ -62,7 +66,7 @@ class NonSignalingRxTemplate(MeasurementTemplate):
             }
         )
 
-    async def apply(self, cmw) -> None:
+    async def apply(self, cmw: "CMW500Driver") -> None:
         """
         Apply non-signaling RX test configuration to CMW500.
 

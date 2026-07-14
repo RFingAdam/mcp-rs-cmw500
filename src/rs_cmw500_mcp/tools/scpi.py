@@ -31,7 +31,10 @@ async def _handle_scpi_send(args: dict[str, Any]) -> CallToolResult:
     command = args["command"]
     logger.warning(f"Raw SCPI send: {command!r}")
     await cmw.scpi_send(command)
-    return _format_result({"status": "ok", "command": command})
+    result = {"status": "ok", "command": command}
+    if settings.auto_error_check:
+        result["errors"] = await cmw.get_errors()
+    return _format_result(result)
 
 
 async def _handle_scpi_query(args: dict[str, Any]) -> CallToolResult:
@@ -46,7 +49,10 @@ async def _handle_scpi_query(args: dict[str, Any]) -> CallToolResult:
     command = args["command"]
     logger.warning(f"Raw SCPI query: {command!r}")
     response = await cmw.scpi_query(command)
-    return _format_result({"command": command, "response": response})
+    result = {"command": command, "response": response}
+    if settings.auto_error_check:
+        result["errors"] = await cmw.get_errors()
+    return _format_result(result)
 
 
 async def _handle_reset(args: dict[str, Any]) -> CallToolResult:

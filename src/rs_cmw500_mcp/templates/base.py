@@ -4,7 +4,10 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..driver.cmw500_driver import CMW500Driver
 
 
 @dataclass
@@ -123,7 +126,7 @@ class MeasurementTemplate:
             "parameter_count": len(self.parameters),
         }
 
-    async def apply(self, cmw) -> None:
+    async def apply(self, cmw: "CMW500Driver") -> None:
         """
         Apply template configuration to CMW500.
 

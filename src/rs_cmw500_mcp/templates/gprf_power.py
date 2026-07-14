@@ -1,8 +1,12 @@
 """Generic RF power measurement template."""
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .base import MeasurementTemplate
+
+if TYPE_CHECKING:
+    from ..driver.cmw500_driver import CMW500Driver
 
 
 @dataclass
@@ -18,7 +22,7 @@ class GPRFPowerTemplate(MeasurementTemplate):
     description: str = "Generic RF power measurement at specified frequency"
     technology: str = "GPRF"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default parameters if not provided."""
         if not self.parameters:
             self.parameters = {
@@ -59,7 +63,7 @@ class GPRFPowerTemplate(MeasurementTemplate):
             }
         )
 
-    async def apply(self, cmw) -> None:
+    async def apply(self, cmw: "CMW500Driver") -> None:
         """
         Apply GPRF power measurement configuration to CMW500.
 

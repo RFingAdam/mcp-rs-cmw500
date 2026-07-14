@@ -1,9 +1,13 @@
 """LTE TX power measurement template."""
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ..models.cmw_types import CellConfig
 from .base import MeasurementTemplate
+
+if TYPE_CHECKING:
+    from ..driver.cmw500_driver import CMW500Driver
 
 
 @dataclass
@@ -19,7 +23,7 @@ class LTETxPowerTemplate(MeasurementTemplate):
     description: str = "LTE TX power measurement in signaling mode"
     technology: str = "LTE"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default parameters if not provided."""
         if not self.parameters:
             self.parameters = {
@@ -66,7 +70,7 @@ class LTETxPowerTemplate(MeasurementTemplate):
             }
         )
 
-    async def apply(self, cmw) -> None:
+    async def apply(self, cmw: "CMW500Driver") -> None:
         """
         Apply LTE TX measurement configuration to CMW500.
 

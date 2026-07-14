@@ -11,7 +11,7 @@
 [![eng-mcp-suite](https://img.shields.io/badge/eng--mcp--suite-member-22D3EE.svg)](https://github.com/RFingAdam/eng-mcp-suite)
 
 **Drive the Rohde & Schwarz CMW500 Wideband Radio Communication Tester from any MCP-compatible AI client.**
-**Direct TCP/IP SCPI (port 5025) — 79 tools across LTE signaling, WLAN, Bluetooth/BLE, and GPRF. No CMWrun dependency.**
+**Direct TCP/IP SCPI (port 5025) — 102 tools across LTE signaling + RX, WLAN, Bluetooth/BLE (incl. signaling), GPRF, and coexistence, plus a SCPI-reference resource set and guided coex prompts. No CMWrun dependency.**
 
 [Quick start](#quick-start) ·
 [Tools](#tools) ·
@@ -38,11 +38,21 @@ over direct TCP/IP SCPI (port `5025`). No CMWrun dependency, no proprietary
 middleware — your AI agent talks to the CMW500 the same way a Python script
 would, only in natural language.
 
-The server covers five RF technology domains: LTE signaling (cell config,
-NAS/bearer, C-DRX, full TX measurements), WLAN non-signaling
-(802.11a/b/g/n/ac/ax with 20/40/80/160 MHz channels), Bluetooth/BLE
-non-signaling (Classic DH1-DH5 + LE 1M/2M/Coded), GPRF generator/analyzer
-(CW/ARB output, power/spectrum measurements), and shared signal-path control.
+The server covers: LTE signaling (cell config, NAS/bearer, C-DRX, full TX
+measurements) **and LTE RX sensitivity** via the Extended-BLER engine; WLAN
+non-signaling (802.11a/b/g/n/ac/ax, 20/40/80/160 MHz) **plus WLAN AP-emulation
+signaling** for LTE+Wi-Fi coex; Bluetooth/BLE non-signaling (Classic DH1-DH5 +
+LE 1M/2M/Coded) **plus BLE signaling PER**; GPRF generator/analyzer; shared
+signal-path control; and a **coexistence layer** — an LTE↔BLE desense sweep
+engine and a pure-computation intermod/harmonic (IMD) frequency planner. It also
+exposes MCP **resources** (a curated SCPI reference + live capability discovery)
+and **prompts** (guided coex/RX workflows).
+
+> **Coexistence & HaLow note.** The CMW500 supports 802.11a/b/g/n/ac/ax but
+> **not** 802.11ah/HaLow natively. LTE+Wi-Fi and LTE↔BLE coex run on the
+> instrument directly; HaLow (and other sub-GHz) coex is handled by the IMD
+> planner plus using the GPRF generator as an aggressor against an externally
+> measured victim link.
 
 **What `mcp-rs-cmw500` does well:**
 
@@ -97,10 +107,12 @@ cp .env.example .env   # edit with your CMW500 IP + safety limits
 import asyncio
 from rs_cmw500_mcp.driver import CMW500Driver
 
+from rs_cmw500_mcp.models.cmw_types import CellConfig
+
 async def main():
     async with CMW500Driver("192.168.1.100", 5025) as cmw:
         await cmw.lte_configure_cell(
-            band=7, bandwidth_mhz=20, earfcn=3100, dl_power_dbm=-70,
+            CellConfig(band=7, bandwidth_mhz=20, dl_earfcn=3100, dl_level_dbm=-70),
         )
         await cmw.lte_cell_on()
         # ... wait for UE attach ...
@@ -152,18 +164,23 @@ rs-cmw500-mcp        # MCP server over stdio
 
 ## Tools
 
-79 MCP tools, grouped:
+102 MCP tools, grouped:
 
 | Group | Count | Examples |
 | ----- | ----- | -------- |
 | **Connection** | 6 | `cmw_discover`, `cmw_connect`, `cmw_identify`, `cmw_get_status`, `cmw_query_options` |
 | **GPRF Generator** | 7 | `cmw_gen_set_frequency`, `cmw_gen_set_level`, `cmw_gen_output_on/off`, `cmw_gen_load_arb`, `cmw_gen_configure_arb` |
-| **GPRF Analyzer** | 10 | `cmw_meas_configure_power`, `cmw_meas_configure_spectrum`, `cmw_meas_trigger`, `cmw_meas_fetch_power`, `cmw_meas_fetch_spectrum` |
+| **GPRF Analyzer** | 11 | `cmw_meas_configure_power`, `cmw_meas_configure_spectrum`, `cmw_meas_trigger(_spectrum)`, `cmw_meas_fetch_power/spectrum` |
 | **GPRF Signal Path** | 4 | `cmw_set_signal_path`, `cmw_get_signal_path`, `cmw_set_port`, `cmw_system_all_off` |
 | **LTE Signaling** | 16 | `cmw_lte_configure_cell`, `cmw_lte_cell_on/off`, `cmw_lte_configure_nas/bearer/cdrx`, `cmw_lte_meas_*` |
+| **LTE RX / Sensitivity** | 4 | `cmw_lte_rx_configure`, `cmw_lte_attach_wait`, `cmw_lte_rx_measure_bler`, `cmw_lte_rx_sensitivity` |
 | **WLAN Non-Signaling** | 11 | `cmw_wlan_configure`, `cmw_wlan_set_standard/bandwidth/frequency`, `cmw_wlan_fetch_*` |
+| **WLAN Signaling (AP)** | 4 | `cmw_wlan_sig_configure_ap`, `cmw_wlan_sig_ap_on/off`, `cmw_wlan_sig_get_state` |
 | **Bluetooth/BLE Non-Signaling** | 11 | `cmw_bt_configure`, `cmw_bt_set_technology/ble_mode/packet_type`, `cmw_bt_fetch_*` |
-| **SCPI** | 4 | `cmw_scpi_send`, `cmw_scpi_query`, `cmw_reset`, `cmw_preset` |
+| **BLE Signaling (PER)** | 5 | `cmw_ble_sig_configure`, `cmw_ble_sig_connect/detach`, `cmw_ble_sig_measure_per`, `cmw_ble_sig_sensitivity` |
+| **Coexistence** | 5 | `cmw_coex_plan`, `cmw_coex_step`, `cmw_coex_result`, `cmw_coex_measure_point`, `cmw_coex_validate_routing` |
+| **RF Planner (IMD)** | 2 | `cmw_imd_analyze`, `cmw_imd_batch` |
+| **SCPI / System** | 6 | `cmw_scpi_send`, `cmw_scpi_query`, `cmw_scpi_query_opc`, `cmw_system_error`, `cmw_reset`, `cmw_preset` |
 | **Templates** | 3 | `cmw_list_templates`, `cmw_load_template`, `cmw_apply_template` |
 | **State** | 3 | `cmw_save_state`, `cmw_load_state`, `cmw_get_full_state` |
 | **Limits** | 4 | `cmw_define_limit`, `cmw_check_limits`, `cmw_list_limits`, `cmw_clear_limits` |
@@ -172,6 +189,36 @@ Available templates: `lte_tx_power`, `gprf_power`, `nonsig_rx`, `wlan_tx`,
 `wlan_rx`, `ble_tx`, `ble_rx`, `bt_classic_tx`. Full tool reference in
 [`docs/tools.md`](docs/tools.md).
 
+### Resources & prompts
+
+Beyond tools, the server publishes MCP **resources** and **prompts**:
+
+- **Resources** (`cmw://…`): a curated SCPI quick-reference per subsystem
+  (`cmw://scpi/lte-signaling`, `…/bluetooth-signaling`, `…/wlan-signaling`,
+  `…/gprf`, `…/routing`, `…/system`), a reliability-code table, a JSON band-plan
+  dump, overridable band presets, and live `cmw://capabilities` (installed
+  options queried from the instrument). This lets an agent construct correct
+  SCPI for any licensed subsystem via the raw-SCPI tools.
+- **Prompts**: `lte_ble_desense_sweep`, `lte_wifi_coexistence_throughput`,
+  `rx_sensitivity_search`, `imd_hit_analysis`, `subghz_aggressor_sweep` — each
+  states the exact tool-call sequence, neutral defaults, and safety reminders.
+
+### Coexistence
+
+The coex layer runs one technology as an **aggressor** while measuring another
+as a **victim**:
+
+- **LTE ↔ BLE desense** — `cmw_coex_plan` expands LTE bands × EARFCNs (plus an
+  optional aggressor-off baseline) against BLE data channels; `cmw_coex_step`
+  advances the resumable sweep; `cmw_coex_result` returns a
+  rows(LTE condition) × cols(BLE channel) sensitivity matrix plus long-format
+  data.
+- **LTE + Wi-Fi** — emulate an LTE eNB and a Wi-Fi AP simultaneously (separate
+  RF connectors; `cmw_coex_validate_routing` guards against a shared connector).
+- **IMD planning** — `cmw_imd_analyze` / `cmw_imd_batch` predict which
+  harmonic/intermod products land in a victim band (GNSS, Wi-Fi, HaLow, LTE, …)
+  before you spend bench time.
+
 ---
 
 ## What it solves
@@ -179,9 +226,11 @@ Available templates: `lte_tx_power`, `gprf_power`, `nonsig_rx`, `wlan_tx`,
 | Domain | Measurements | Standards |
 | ------ | ------------ | --------- |
 | **LTE signaling** | Cell setup, NAS attach, bearer, C-DRX, TX power, EVM, ACLR, SEM, frequency error | 3GPP TS 36.521 |
-| **WLAN non-signaling** | 802.11a/b/g/n/ac/ax @ 20/40/80/160 MHz: TX power, EVM, spectrum flatness, frequency error | IEEE 802.11 |
+| **LTE RX sensitivity** | Extended-BLER (EBL) coarse+fine search to a target BLER per EARFCN | 3GPP TS 36.521 |
+| **WLAN** | 802.11a/b/g/n/ac/ax @ 20/40/80/160 MHz: TX power, EVM, spectrum flatness, freq error; AP-emulation signaling | IEEE 802.11 |
 | **Bluetooth Classic** | DH1-DH5 packet types: TX power, modulation (DEVM), frequency offset/drift | Bluetooth Core 5.x |
-| **BLE** | 1M / 2M / Coded S2 / S8: TX power, modulation, frequency | Bluetooth Core 5.x |
+| **BLE** | 1M / 2M / Coded: TX power, modulation, frequency; signaling PER RX sensitivity | Bluetooth Core 5.x |
+| **Coexistence** | LTE↔BLE desense sweep, LTE+Wi-Fi, IMD/harmonic planning (GNSS/Wi-Fi/HaLow/LTE) | — |
 | **GPRF** | CW/ARB output, power, spectrum — for vendor-specific test sequences | — |
 
 ---

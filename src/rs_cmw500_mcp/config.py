@@ -48,8 +48,21 @@ class CMWSettings(BaseSettings):
 
     # Raw SCPI access
     allow_raw_scpi: bool = Field(
-        default=True,
-        description="Allow raw SCPI command execution (default: True for backwards compat)",
+        default=False,
+        description="Allow raw SCPI execution (default False; set CMW_ALLOW_RAW_SCPI=true)",
+    )
+
+    # Automatically drain SYSTem:ERRor? after writes / INITiate (esp. raw SCPI)
+    auto_error_check: bool = Field(
+        default=False,
+        description="Automatically query the SCPI error queue after commands (default: False)",
+    )
+
+    # Band-selection presets (neutral, user-overridable). Points to a JSON file
+    # mapping preset names -> list of LTE band numbers. Empty = use built-in defaults.
+    band_presets_file: str = Field(
+        default="",
+        description="Path to a JSON file of named LTE band-selection presets (optional)",
     )
 
     # Logging

@@ -1,0 +1,21 @@
+{
+  "description": "Neutral, user-overridable LTE band-selection presets. Point CMW_BAND_PRESETS_FILE at a copy of this file to customise. These are selection convenience sets only; the standard RF facts (EARFCN tables, band edges) live in code.",
+  "presets": {
+    "full_fdd_set": {
+      "description": "All supported FDD bands.",
+      "lte_bands": [1, 2, 3, 4, 5, 7, 8, 9, 12, 13, 14, 18, 19, 20, 25, 26, 28]
+    },
+    "frequency_coverage_set": {
+      "description": "One band per distinct frequency region for broad coverage with fewer sweeps.",
+      "lte_bands": [1, 3, 7, 8, 12, 13, 20, 25, 26, 28]
+    },
+    "low_band_set": {
+      "description": "Sub-1 GHz bands (coex-sensitive, near sub-GHz ISM/HaLow).",
+      "lte_bands": [5, 8, 12, 13, 14, 18, 19, 20, 26, 28]
+    },
+    "operator_sensitivity_set": {
+      "description": "Example operator-defined subset with tight receiver-sensitivity requirements. Replace with your own bands.",
+      "lte_bands": [2, 4, 5, 12, 14]
+    }
+  }
+}

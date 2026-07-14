@@ -218,10 +218,10 @@ class TestValidateSafePath:
 class TestRawScpiGuard:
     """Tests for raw SCPI safety guard and logging."""
 
-    def test_config_allow_raw_scpi_default_true(self):
-        """Default config should allow raw SCPI (backwards compat)."""
+    def test_config_allow_raw_scpi_default_false(self):
+        """Default config should DISABLE raw SCPI (secure default)."""
         settings = CMWSettings()
-        assert settings.allow_raw_scpi is True
+        assert settings.allow_raw_scpi is False
 
     def test_config_allow_raw_scpi_can_be_disabled(self):
         """allow_raw_scpi can be set to False."""

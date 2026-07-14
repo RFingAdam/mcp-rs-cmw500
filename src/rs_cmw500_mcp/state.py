@@ -5,7 +5,10 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .driver.cmw500_driver import CMW500Driver
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +212,7 @@ class StateManager:
             state_directory = Path("./cmw_states")
         self.state_directory = Path(state_directory)
 
-    async def capture_state(self, cmw) -> InstrumentState:
+    async def capture_state(self, cmw: "CMW500Driver") -> InstrumentState:
         """
         Capture current CMW500 state.
 
@@ -267,7 +270,7 @@ class StateManager:
             instrument_info=instrument_info,
         )
 
-    async def restore_state(self, cmw, state: InstrumentState) -> None:
+    async def restore_state(self, cmw: "CMW500Driver", state: InstrumentState) -> None:
         """
         Restore CMW500 to saved state.
 
@@ -295,7 +298,7 @@ class StateManager:
 
     def list_saved_states(self) -> list[dict[str, Any]]:
         """List all saved state files."""
-        states = []
+        states: list[dict[str, Any]] = []
         if not self.state_directory.exists():
             return states
 

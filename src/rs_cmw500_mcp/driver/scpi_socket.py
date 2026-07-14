@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from types import TracebackType
 
 from ..exceptions import CommunicationError, ConnectionError, TimeoutError
 
@@ -119,6 +120,7 @@ class SCPISocket:
         """
         if not self.is_connected:
             raise ConnectionError("Not connected to CMW500", self.address)
+        assert self._writer is not None  # guaranteed by is_connected
 
         async with self._lock:
             try:
@@ -150,6 +152,7 @@ class SCPISocket:
         """
         if not self.is_connected:
             raise ConnectionError("Not connected to CMW500", self.address)
+        assert self._reader is not None  # guaranteed by is_connected
 
         timeout = timeout or self.command_timeout
 
@@ -229,6 +232,11 @@ class SCPISocket:
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Async context manager exit."""
         await self.disconnect()

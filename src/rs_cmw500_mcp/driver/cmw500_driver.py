@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from enum import Enum
+from types import TracebackType
 from typing import Any
 
 from ..exceptions import (
@@ -12,10 +13,12 @@ from ..models.cmw_types import (
     ACLRResult,
     ARBRepetition,
     CellConfig,
+    EblResult,
     EVMResult,
     InstrumentInfo,
     LTEBandwidth,
     MeasRepetition,
+    PerResult,
     PowerResult,
     SEMResult,
     SignalPath,
@@ -226,6 +229,11 @@ class CMW500Driver:
         """Send raw SCPI query and return response."""
         return await self._scpi.query(command)
 
+    async def scpi_send_opc(self, command: str) -> bool:
+        """Send a raw SCPI command and block on *OPC? until it completes."""
+        await self._scpi.send(command)
+        return await self._scpi.wait_opc()
+
     # =========================================================================
     # GPRF Generator (RF signal output)
     # =========================================================================
@@ -435,15 +443,48 @@ class CMW500Driver:
 
         return result
 
-    async def meas_fetch_spectrum(self) -> dict[str, Any]:
-        """
-        Fetch spectrum measurement results.
+    async def meas_trigger_spectrum(self) -> None:
+        """Initiate the GPRF spectrum measurement."""
+        await self._scpi.send("INITiate:GPRF:MEASurement1:SPECtrum")
 
-        Returns:
-            Dictionary with spectrum data
+    async def meas_fetch_spectrum(self, statistic: str = "AVERage") -> dict[str, Any]:
+        """Fetch the GPRF spectrum power trace across the configured span.
+
+        Configure via ``meas_configure_spectrum`` and start via
+        ``meas_trigger_spectrum`` first. Returns the reliability indicator plus
+        the power trace (dBm) for the chosen statistic.
+
+        NOTE: the exact spectrum result node is firmware/option dependent (some
+        CMW builds expose the FFT spectrum under ``FFTSanalyzer`` rather than
+        ``SPECtrum``). This uses the same subsystem as the configure command; on
+        a mismatch it returns a diagnostic ``error`` field rather than raising,
+        and the raw path (see the ``cmw://scpi/gprf`` resource + ``cmw_scpi_query``)
+        remains available. Validate on hardware.
         """
-        # CMW500 spectrum results depend on measurement configuration
-        return {"status": "spectrum measurement not yet configured"}
+        node_map = {
+            "CURRENT": "CURRent",
+            "AVERAGE": "AVERage",
+            "MAXIMUM": "MAXimum",
+            "MINIMUM": "MINimum",
+        }
+        node = node_map.get(statistic.strip().upper(), "AVERage")
+        result: dict[str, Any] = {"statistic": node}
+        try:
+            raw = await self._scpi.query(f"FETCh:GPRF:MEASurement1:SPECtrum:{node}?")
+            parts = [p.strip() for p in raw.split(",")]
+            result["reliability"] = parts[0] if parts else ""
+            values: list[float] = []
+            for p in parts[1:]:
+                try:
+                    values.append(float(p))
+                except ValueError:
+                    continue
+            result["power_dbm"] = values
+            result["point_count"] = len(values)
+        except (OSError, MeasurementError, ValueError) as e:
+            logger.warning(f"Failed to fetch spectrum ({node}): {e}")
+            result["error"] = str(e)
+        return result
 
     # =========================================================================
     # Signal Path / Route
@@ -717,6 +758,80 @@ class CMW500Driver:
             "aclr": aclr.to_dict(),
             "sem": sem.to_dict(),
         }
+
+    # =========================================================================
+    # LTE RX / Extended BLER (receiver sensitivity)
+    #
+    # SCPI here (RSEP/EBL/PSW short forms, SOURce cell control, RFSettings:PCC
+    # channel form) is preserved from field-validated sensitivity scripts. The
+    # SIGN1 instance is equivalent to the bare "SIGN" the scripts used.
+    # =========================================================================
+
+    async def lte_set_operating_band(self, band: int) -> None:
+        """Set the LTE signaling operating band (e.g. band 7 -> OB7)."""
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:BAND OB{int(band)}")
+
+    async def lte_set_rx_bandwidth(self, bandwidth: LTEBandwidth) -> None:
+        """Set the PCC downlink cell bandwidth for RX testing."""
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:CELL:BANDwidth:PCC:DL {bandwidth.value}")
+
+    async def lte_set_earfcn(self, earfcn: int, direction: str = "DL") -> None:
+        """Set the PCC EARFCN for the given direction ('DL' or 'UL')."""
+        d = direction.strip().upper()
+        if d not in ("DL", "UL"):
+            raise ValueError("direction must be 'DL' or 'UL'")
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:RFSettings:PCC:CHANnel:{d} {int(earfcn)}")
+
+    async def lte_set_rsepre_level(self, level_dbm: float) -> None:
+        """Set the downlink RS-EPRE reference level (dBm/15 kHz)."""
+        self._safety.validate_dl_level(level_dbm)
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:DL:PCC:RSEP:LEV {level_dbm}")
+
+    async def lte_ebl_set_subframes(self, subframes: int) -> None:
+        """Set the number of measured subframes for Extended BLER."""
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:EBL:SFR {int(subframes)}")
+
+    async def lte_ebl_configure(self, subframes: int = 100, single_shot: bool = True) -> None:
+        """Configure the Extended BLER measurement (repetition + subframes)."""
+        await self._scpi.send(f"CONFigure:LTE:SIGN1:EBL:REP {'SING' if single_shot else 'CONT'}")
+        await self.lte_ebl_set_subframes(subframes)
+
+    async def lte_ebl_init(self) -> None:
+        """Start a single Extended BLER measurement."""
+        await self._scpi.send("INITiate:LTE:SIGN1:EBL")
+
+    async def lte_ebl_fetch(self) -> EblResult:
+        """Fetch the intermediate Extended BLER result for the PCC.
+
+        Response layout (validated): ``reliability, ..., ..., BLER%, ...``.
+        Reliability 19 means the call dropped / UE not attached.
+        """
+        raw = await self._scpi.query("FETCh:INT:LTE:SIGN1:EBL:PCC:REL?")
+        parts = [p.strip() for p in raw.split(",")]
+        result = EblResult(raw=raw.strip())
+        if parts:
+            result.reliability = parts[0]
+        if result.dropped:
+            return result
+        if len(parts) > 3:
+            try:
+                result.bler_percent = float(parts[3])
+            except ValueError:
+                logger.debug(f"Unparseable EBL BLER field: {raw.strip()!r}")
+        return result
+
+    async def lte_sig_set_cell_state(self, on: bool) -> None:
+        """Switch the LTE signaling cell ON/OFF (SOURce form used for RX flows)."""
+        await self._scpi.send(f"SOURce:LTE:SIGN1:CELL:STAT {'ON' if on else 'OFF'}")
+        self._cell_on = on
+
+    async def lte_sig_cell_state_all(self) -> str:
+        """Query combined cell state, e.g. 'ON,ADJ' when stable."""
+        return await self._scpi.query("SOURce:LTE:SIGN1:CELL:STAT:ALL?")
+
+    async def lte_ps_state(self) -> str:
+        """Query the packet-switched connection state, e.g. 'ATT' when attached."""
+        return await self._scpi.query("FETCh:LTE:SIGN1:PSW:STAT?")
 
     # =========================================================================
     # WLAN Non-Signaling
@@ -1113,6 +1228,117 @@ class CMW500Driver:
         }
 
     # =========================================================================
+    # Bluetooth / BLE Signaling (receiver PER)
+    #
+    # Distinct from the non-signaling BLUetooth:MEAS measurement block above:
+    # this drives the BLUetooth:SIGN signaling application (CMW as Central) to
+    # measure DUT receiver PER. SCPI short forms preserved from validated scripts.
+    # =========================================================================
+
+    async def ble_sig_clear(self) -> None:
+        """Clear the status/error queue (*CLS) before (re)configuring BLE."""
+        await self._scpi.send("*CLS")
+
+    async def ble_sig_set_packets(self, packets: int) -> None:
+        """Set the number of packets per LE 1M PER measurement."""
+        await self._scpi.send(f"CONFigure:BLUetooth:SIGN1:RXQ:PACK:NMOD:LEN:LE1M {int(packets)}")
+
+    async def ble_sig_set_channel(self, channel: int) -> None:
+        """Set the BLE measurement (data) channel index."""
+        await self._scpi.send(f"CONFigure:BLUetooth:SIGN1:RFS:NMOD:MCH:LEN {int(channel)}")
+
+    async def ble_sig_set_level(self, level_dbm: float) -> None:
+        """Set the CMW BLE transmit level toward the DUT (dBm)."""
+        self._safety.validate_generator_power(level_dbm)
+        await self._scpi.send(f"CONFigure:BLUetooth:SIGN1:RFS:LEV {level_dbm}")
+
+    async def ble_sig_read_per(self) -> PerResult:
+        """Read the LE 1M PER result (reliability 0 = valid; index 1 = PER%)."""
+        raw = await self._scpi.query("READ:BLUetooth:SIGN1:RXQ:PER:NMOD:LEN:LE1M?")
+        parts = [p.strip() for p in raw.split(",")]
+        result = PerResult(raw=raw.strip())
+        if parts:
+            result.reliability = parts[0]
+        if result.reliability == "0" and len(parts) >= 2:
+            try:
+                result.per_percent = float(parts[1])
+            except ValueError:
+                logger.debug(f"Unparseable BLE PER field: {raw.strip()!r}")
+        return result
+
+    async def ble_sig_connection(self, action: str) -> None:
+        """Drive the BLE LE connection action ('CONN' to connect, 'DET' to detach)."""
+        act = action.strip().upper()
+        if act not in ("CONN", "DET"):
+            raise ValueError("action must be 'CONN' or 'DET'")
+        await self._scpi.send(f"CALL:BLUetooth:SIGN1:CONN:ACT:LES {act}")
+
+    # =========================================================================
+    # WLAN Signaling (Access-Point emulation, for LTE+Wi-Fi coex)
+    #
+    # NOTE: these SCPI commands are derived from R&S application notes
+    # (1C106 / 1C107), NOT from the field-validated coex scripts, and require the
+    # WLAN (advanced) signaling license. Validate on hardware before relying on
+    # them. String parameters are sanitized.
+    # =========================================================================
+
+    async def wlan_sig_set_route(self, scenario: str = "SAL") -> None:
+        """Set the WLAN signaling routing scenario."""
+        sanitize_scpi_param(scenario)
+        await self._scpi.send(f"ROUTe:WLAN:SIGN1:SCENario {scenario}")
+
+    async def wlan_sig_set_standard(self, standard: str) -> None:
+        """Set the WLAN signaling standard (CMW token, e.g. GOFDm/HTOFdm/VHTofdm/HEOFdm)."""
+        sanitize_scpi_param(standard)
+        await self._scpi.send(f"CONFigure:WLAN:SIGN1:STANdard {standard}")
+
+    async def wlan_sig_set_bandwidth(self, bandwidth: str) -> None:
+        """Set the WLAN signaling bandwidth (BW20/BW40/BW80/BW160)."""
+        sanitize_scpi_param(bandwidth)
+        await self._scpi.send(f"CONFigure:WLAN:SIGN1:RFSettings:BWIDth {bandwidth}")
+
+    async def wlan_sig_set_channel(self, channel: int) -> None:
+        """Set the WLAN signaling operating channel number."""
+        await self._scpi.send(f"CONFigure:WLAN:SIGN1:RFSettings:CHANnel {int(channel)}")
+
+    async def wlan_sig_set_frequency(self, frequency_hz: float) -> None:
+        """Set the WLAN signaling center frequency in Hz."""
+        self._safety.validate_frequency(frequency_hz)
+        await self._scpi.send(f"CONFigure:WLAN:SIGN1:RFSettings:FREQuency {frequency_hz}")
+
+    async def wlan_sig_set_level(self, level_dbm: float) -> None:
+        """Set the emulated AP transmit level in dBm."""
+        self._safety.validate_generator_power(level_dbm)
+        await self._scpi.send(f"CONFigure:WLAN:SIGN1:RFSettings:LEVel {level_dbm}")
+
+    async def wlan_sig_set_ssid(self, ssid: str) -> None:
+        """Set the emulated AP SSID."""
+        sanitize_scpi_param(ssid)
+        await self._scpi.send(f"CONFigure:WLAN:SIGN1:CONNection:SSID '{ssid}'")
+
+    async def wlan_sig_set_security(self, security_type: str = "DISabled") -> None:
+        """Set the emulated AP security type (DISabled/WPA/WPA2/WPA3 per license)."""
+        sanitize_scpi_param(security_type)
+        await self._scpi.send(f"CONFigure:WLAN:SIGN1:CONNection:STYPe {security_type}")
+
+    async def wlan_sig_set_passphrase(self, passphrase: str) -> None:
+        """Set the emulated AP WPA passphrase (test network only)."""
+        sanitize_scpi_param(passphrase)
+        await self._scpi.send(f"CONFigure:WLAN:SIGN1:CONNection:PASSphrase '{passphrase}'")
+
+    async def wlan_sig_set_state(self, on: bool) -> None:
+        """Switch the emulated AP ON/OFF."""
+        await self._scpi.send(f"SOURce:WLAN:SIGN1:STATe {'ON' if on else 'OFF'}")
+
+    async def wlan_sig_state_all(self) -> str:
+        """Query combined AP state, e.g. 'ON,ADJ' when stable."""
+        return await self._scpi.query("SOURce:WLAN:SIGN1:STATe:ALL?")
+
+    async def wlan_sig_connection_state(self) -> str:
+        """Query DUT association/connection state."""
+        return await self._scpi.query("SENSe:WLAN:SIGN1:CONNection:STATe?")
+
+    # =========================================================================
     # Enhanced GPRF
     # =========================================================================
 
@@ -1197,7 +1423,12 @@ class CMW500Driver:
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Async context manager exit."""
         # Safety: turn off generator on exit
         if self._generator_on:
