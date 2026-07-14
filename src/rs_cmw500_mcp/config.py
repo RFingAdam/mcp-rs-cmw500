@@ -65,6 +65,23 @@ class CMWSettings(BaseSettings):
         description="Path to a JSON file of named LTE band-selection presets (optional)",
     )
 
+    # Per-unit bench profile (connection + routing + attenuation + expected licenses).
+    profile_file: str = Field(
+        default="",
+        description="Path to a bench-profile JSON auto-loaded at start (CMW_PROFILE_FILE)",
+    )
+
+    # Directories for on-disk artifacts (bench profiles, test plans, reports).
+    profile_dir: str = Field(
+        default="./cmw_profiles", description="Directory for bench-profile JSON files"
+    )
+    testplan_dir: str = Field(
+        default="./cmw_testplans", description="Directory for saved test-plan JSON files"
+    )
+    report_dir: str = Field(
+        default="./cmw_reports", description="Directory for generated report files"
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Log level")
 

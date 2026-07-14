@@ -34,7 +34,8 @@ Universal patterns used across subsystems:
   (see cmw://reference/reliability-codes).
 
 Per-subsystem sheets: cmw://scpi/lte-signaling, cmw://scpi/bluetooth-signaling,
-cmw://scpi/wlan-signaling, cmw://scpi/gprf, cmw://scpi/routing, cmw://scpi/system.
+cmw://scpi/wlan-signaling, cmw://scpi/wlan-throughput, cmw://scpi/gsm-signaling,
+cmw://scpi/wcdma-signaling, cmw://scpi/gprf, cmw://scpi/routing, cmw://scpi/system.
 Data: cmw://reference/band-plan, cmw://reference/reliability-codes,
 cmw://reference/band-presets. Live: cmw://capabilities.
 
@@ -155,6 +156,54 @@ set depends on the application and firmware; consult the R&S manual for the full
 table. In this server: LTE EBL 19 -> dropped; BLE PER 0 -> valid.
 """
 
+_SCPI_GSM = """# GSM/GPRS signaling (options CMW-KS200/KM200 — app-note-derived)
+
+- `CONFigure:GSM:SIGN1:BAND <G09|G18|...>`
+- `CONFigure:GSM:SIGN1:RFSettings:CHANnel:TCH <arfcn>` (and `:BCH`)
+- `CONFigure:GSM:SIGN1:RFSettings:LEVel <dBm>`
+- `SOURce:GSM:SIGN1:STATe ON|OFF`, `SOURce:GSM:SIGN1:STATe:ALL?`
+- `SENSe:GSM:SIGN1:CSWitched:STATe?` (connection state)
+- TX: `INITiate:GSM:MEAS1:MEValuation`, `FETCh:GSM:MEAS1:MEValuation:POWer:CURRent?`
+- RX: `FETCh:GSM:SIGN1:BER?`
+
+Typed tools: cmw_gsm_sig_configure, cmw_gsm_sig_cell_on/off, cmw_gsm_sig_get_state,
+cmw_gsm_meas_tx, cmw_gsm_sig_ber. Validate on hardware.
+"""
+
+_SCPI_WCDMA = """# WCDMA/UMTS signaling (options CMW-KS400/KM400 — app-note-derived)
+
+- `CONFigure:WCDMa:SIGN1:CARRier:BAND <OB1|...>`
+- `CONFigure:WCDMa:SIGN1:CARRier:DL:CHANnel <uarfcn>`
+- `CONFigure:WCDMa:SIGN1:DOWNlink:LEVel <dBm>`
+- `SOURce:WCDMa:SIGN1:CELL:STATe ON|OFF`, `SOURce:WCDMa:SIGN1:CELL:STATe:ALL?`
+- `SENSe:WCDMa:SIGN1:CONNection:STATe?` (RRC state)
+- TX: `INITiate:WCDMa:MEAS1:MEValuation`, `FETCh:WCDMa:MEAS1:MEValuation:POWer:CURRent?`
+- RX: `FETCh:WCDMa:SIGN1:BER?`
+
+Typed tools: cmw_wcdma_sig_configure, cmw_wcdma_sig_cell_on/off, cmw_wcdma_sig_get_state,
+cmw_wcdma_meas_tx, cmw_wcdma_sig_ber. Validate on hardware.
+"""
+
+_SCPI_DAU = """# WLAN throughput — Data Application Unit (DAU)
+
+Requires DAU hardware (CMW-B450) + option KM050; pair with WLAN signaling
+(CMW as AP, DUT associated). Overall IP throughput (well-grounded):
+- `INITiate:DATA:MEASurement1:THRoughput`
+- `FETCh:DATA:MEASurement1:THRoughput:OVERall:DLINk?`  -> reliability,cur,min,max,avg (bit/s)
+- `FETCh:DATA:MEASurement1:THRoughput:OVERall:ULINk?`  (uplink variant)
+
+iPerf / ping (simplified here; validate on hardware):
+- `CONFigure:DATA:MEASurement1:IPERf:PROTocol TCP|UDP`, `INITiate:DATA:MEASurement1:IPERf`,
+  `FETCh:DATA:MEASurement1:IPERf:ALL?`
+- `CONFigure:DATA:MEASurement1:PING:DADDress '<ip>'`, `INITiate:DATA:MEASurement1:PING`,
+  `FETCh:DATA:MEASurement1:PING:ALL?`
+- IP services (DHCP/DNS/addressing) live under `CONFigure:DATA:CONTrol:...` — reach via
+  raw SCPI once licensed.
+
+Typed tools: cmw_data_throughput, cmw_data_iperf_run, cmw_data_ping. This is the
+Wi-Fi victim metric for the lte_wifi_coexistence_throughput prompt.
+"""
+
 # Static markdown resources keyed by URI: uri -> (name, description, content).
 _STATIC: dict[str, tuple[str, str, str]] = {
     "cmw://scpi/index": (
@@ -184,6 +233,21 @@ _STATIC: dict[str, tuple[str, str, str]] = {
         _SCPI_ROUTING,
     ),
     "cmw://scpi/system": ("System SCPI", "System/common SCPI commands", _SCPI_SYSTEM),
+    "cmw://scpi/gsm-signaling": (
+        "GSM signaling SCPI",
+        "GSM/GPRS cell + TX/BER SCPI (license-gated)",
+        _SCPI_GSM,
+    ),
+    "cmw://scpi/wcdma-signaling": (
+        "WCDMA signaling SCPI",
+        "WCDMA/UMTS cell + TX/BER SCPI (license-gated)",
+        _SCPI_WCDMA,
+    ),
+    "cmw://scpi/wlan-throughput": (
+        "WLAN throughput / DAU SCPI",
+        "Data Application Unit IP throughput / iPerf / ping",
+        _SCPI_DAU,
+    ),
     "cmw://reference/reliability-codes": (
         "Reliability codes",
         "CMW result reliability indicator table",
@@ -206,6 +270,11 @@ _DYNAMIC: dict[str, tuple[str, str, str]] = {
     "cmw://capabilities": (
         "Live capabilities (JSON)",
         "Installed options queried from the instrument",
+        MIME_JSON,
+    ),
+    "cmw://profile": (
+        "Active bench profile (JSON)",
+        "The loaded per-unit bench profile (connection/routing/attenuation/licenses)",
         MIME_JSON,
     ),
 }
@@ -270,6 +339,15 @@ def _band_presets_json() -> str:
         return json.dumps({"error": f"Could not read presets file {path}: {exc}"})
 
 
+def _profile_json() -> str:
+    from ..profile import get_active_profile
+
+    profile = get_active_profile()
+    if profile is None:
+        return json.dumps({"active": False})
+    return json.dumps({"active": True, "profile": profile.to_dict()}, indent=2)
+
+
 async def _capabilities_json() -> str:
     # Import here to avoid a resources<->tools import cycle at module load.
     from ..tools.shared import _get_cmw
@@ -301,4 +379,6 @@ async def read_resource(uri: str) -> tuple[str, str]:
         return _band_presets_json(), MIME_JSON
     if uri == "cmw://capabilities":
         return await _capabilities_json(), MIME_JSON
+    if uri == "cmw://profile":
+        return _profile_json(), MIME_JSON
     raise ValueError(f"Unknown resource: {uri}")

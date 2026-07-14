@@ -405,6 +405,44 @@ class PerResult:
 
 
 @dataclass
+class ThroughputResult:
+    """DAU IP throughput result (bit/s), one direction.
+
+    Reliability 0 indicates a valid measurement. Values are in bit/s; *_mbps
+    convenience fields are added in to_dict.
+    """
+
+    reliability: str = ""
+    direction: str = ""  # "UL" | "DL"
+    current_bps: float | None = None
+    min_bps: float | None = None
+    max_bps: float | None = None
+    average_bps: float | None = None
+    raw: str = ""
+
+    @property
+    def valid(self) -> bool:
+        return self.reliability.strip() == "0"
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "reliability": self.reliability,
+            "direction": self.direction,
+            "valid": self.valid,
+        }
+        for name, value in (
+            ("current_bps", self.current_bps),
+            ("min_bps", self.min_bps),
+            ("max_bps", self.max_bps),
+            ("average_bps", self.average_bps),
+        ):
+            if value is not None:
+                result[name] = value
+                result[name.replace("_bps", "_mbps")] = round(value / 1e6, 4)
+        return result
+
+
+@dataclass
 class RxSensitivityResult:
     """Receiver-sensitivity search outcome for one condition (LTE or BLE)."""
 

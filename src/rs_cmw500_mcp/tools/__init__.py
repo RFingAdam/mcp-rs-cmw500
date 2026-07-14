@@ -24,16 +24,22 @@ from . import (  # noqa: F401, E402
     connection,
     gprf,
     gprf_advanced,
+    gsm_signaling,
     limits_tools,
     lte,
     lte_rx,
+    profile_tools,
     rf_planner,
     scpi,
+    selftest,
     state_tools,
     system,
     templates_tools,
+    testplan_tools,
+    wcdma_signaling,
     wlan,
     wlan_signaling,
+    wlan_throughput,
 )
 
 
